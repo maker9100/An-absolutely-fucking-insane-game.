@@ -77,13 +77,12 @@ button{font:inherit}
   position:absolute;width:48px;height:48px;border-radius:50%;left:32px;top:32px;background:#ffffff78
 }
 #moveStick{left:calc(20px + var(--safeL));bottom:calc(25px + var(--safeB))}
-#lookStick{right:calc(20px + var(--safeR));bottom:calc(25px + var(--safeB))}
 .touchButton{
   position:absolute;pointer-events:auto;border-radius:10px;border:1px solid #ffffff58;
   background:#111c;color:white;font-weight:bold
 }
-#fireButton{right:calc(28px + var(--safeR));bottom:calc(164px + var(--safeB));width:88px;height:58px}
-#reloadButton{right:calc(128px + var(--safeR));bottom:calc(171px + var(--safeB));width:54px;height:45px}
+#fireButton{right:calc(24px + var(--safeR));bottom:calc(34px + var(--safeB));width:92px;height:62px}
+#reloadButton{right:calc(126px + var(--safeR));bottom:calc(42px + var(--safeB));width:54px;height:45px}
 #aimButton{right:calc(16px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
 #espButton{right:calc(86px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
 .touchButton.on{background:#70471d;border-color:#ffbd63}
@@ -109,8 +108,6 @@ button{font:inherit}
 @media(orientation:portrait) and (pointer:coarse){
   .stick{width:100px;height:100px}
   .stickKnob{width:42px;height:42px;left:27px;top:27px}
-  #fireButton{bottom:calc(145px + var(--safeB))}
-  #reloadButton{bottom:calc(151px + var(--safeB))}
 }
 </style>
 </head>
@@ -120,8 +117,8 @@ button{font:inherit}
 
 <div id="menu">
   <h1>CHEAT ARENA</h1>
-  <p>3 VS 3 FPS PROTOTYPE</p>
-  <button id="startAI" class="menuButton primary">AI 3v3 시작</button>
+  <p>5 VS 5 AI FPS PROTOTYPE</p>
+  <button id="startAI" class="menuButton primary">AI 5v5 시작</button>
   <button id="online" class="menuButton">온라인 3v3 (준비 중)</button>
   <p id="serverText">GitHub Pages 클라이언트 · Render 서버 미연결</p>
 </div>
@@ -149,7 +146,6 @@ button{font:inherit}
 
 <div id="touchUI" class="hidden">
   <div id="moveStick" class="stick"><div class="stickKnob"></div></div>
-  <div id="lookStick" class="stick"><div class="stickKnob"></div></div>
   <button id="fireButton" class="touchButton">FIRE</button>
   <button id="reloadButton" class="touchButton">R</button>
   <button id="aimButton" class="touchButton">AIM</button>
@@ -223,18 +219,22 @@ const player = {
   nextShot:0, kills:0, deaths:0, alive:true
 };
 
-const blueSpawn = [[3,2],[2,4]];
-const redSpawn = [[16,14],[15,15],[17,13]];
+const blueSpawn = [[3,2],[2,4],[4,3],[3,5]];
+const redSpawn = [[16,14],[15,15],[17,13],[15,12],[17,15]];
 
 function botAt(pos, team, name){
-  return {x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true};
+  return {x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true,strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI};
 }
 const bots = [
   botAt(blueSpawn[0],0,"BLUE-2"),
   botAt(blueSpawn[1],0,"BLUE-3"),
+  botAt(blueSpawn[2],0,"BLUE-4"),
+  botAt(blueSpawn[3],0,"BLUE-5"),
   botAt(redSpawn[0],1,"RED-1"),
   botAt(redSpawn[1],1,"RED-2"),
-  botAt(redSpawn[2],1,"RED-3")
+  botAt(redSpawn[2],1,"RED-3"),
+  botAt(redSpawn[3],1,"RED-4"),
+  botAt(redSpawn[4],1,"RED-5")
 ];
 
 let running = false;
@@ -247,7 +247,12 @@ let last = performance.now();
 let gameTime = 0;
 const keys = Object.create(null);
 const moveJoy = {x:0,y:0};
-const lookJoy = {x:0,y:0};
+let recoilPitch = 0;
+let recoilKick = 0;
+let recoilSide = 0;
+let touchLookId = null;
+let touchLookX = 0;
+let touchLookY = 0;
 
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -337,7 +342,14 @@ function shoot(shooter,wIndex){
     return;
   }
   shooter.nextShot=gameTime+1/w.rate;
-  if(shooter===player && wIndex<2) player.ammo[wIndex]--;
+  if(shooter===player && wIndex<2){
+    player.ammo[wIndex]--;
+    const kick = wIndex===0 ? 0.018 : 0.052;
+    recoilPitch = Math.min(0.19, recoilPitch + kick);
+    recoilKick = Math.min(1, recoilKick + (wIndex===0 ? 0.42 : 0.75));
+    recoilSide += (Math.random()-.5) * (wIndex===0 ? 0.010 : 0.018);
+    player.a += recoilSide;
+  }
 
   let best=null,bestScore=Infinity;
   for(const t of enemyList(shooter===player?0:shooter.team)){
@@ -387,7 +399,7 @@ function startGame(){
   player.kills=player.deaths=scoreB=scoreR=0;
   spawnEntity(player);
   bots.forEach(spawnEntity);
-  notify("AI 3v3 시작");
+  notify("AI 5v5 시작");
 }
 ui.startAI.addEventListener("click",startGame);
 ui.online.addEventListener("click",()=>notify("Render 서버 붙인 뒤 활성화 예정"));
@@ -398,7 +410,6 @@ function updatePlayer(dt){
   if(TOUCH){
     f=-moveJoy.y;
     s=moveJoy.x;
-    if(!aimOn) player.a += lookJoy.x*dt*3.1;
   }else{
     f=(keys["w"]?1:0)-(keys["s"]?1:0);
     s=(keys["d"]?1:0)-(keys["a"]?1:0);
@@ -408,6 +419,10 @@ function updatePlayer(dt){
     const target=enemyList(0).filter(e=>los(player,e)).sort((a,b)=>dist(player,a)-dist(player,b))[0];
     if(target) player.a += norm(angle(player,target)-player.a)*Math.min(1,dt*11);
   }
+
+  recoilPitch *= Math.pow(0.0015, dt);
+  recoilKick *= Math.pow(0.002, dt);
+  recoilSide *= Math.pow(0.01, dt);
 
   const l=Math.hypot(f,s);
   if(l>1){f/=l;s/=l;}
@@ -421,26 +436,50 @@ function updatePlayer(dt){
 function updateBots(dt){
   for(const b of bots){
     if(!b.alive) continue;
+    b.think -= dt;
     const es=enemyList(b.team);
     if(!es.length) continue;
     es.sort((a,z)=>dist(b,a)-dist(b,z));
     const t=es[0];
-    b.a=angle(b,t);
     const d=dist(b,t);
-    if(d>150){
-      moveEnt(b,Math.cos(b.a)*70*dt,Math.sin(b.a)*70*dt);
+    const sees=los(b,t);
+
+    if(b.think<=0){
+      b.think=.45+Math.random()*.85;
+      if(Math.random()<.55) b.strafe*=-1;
+      b.wander += (Math.random()-.5)*1.8;
     }
-    if(d<560 && los(b,t)) shoot(b,0);
+
+    const targetA=angle(b,t);
+    if(sees) b.a += norm(targetA-b.a)*Math.min(1,dt*6);
+    else b.a += norm(b.wander-b.a)*Math.min(1,dt*2.4);
+
+    let forward = d>190 ? 1 : d<105 ? -.65 : .15;
+    let strafe = sees ? b.strafe*.72 : b.strafe*.28;
+    const speed = sees ? 82 : 64;
+    let dx=(Math.cos(b.a)*forward+Math.cos(b.a+Math.PI/2)*strafe)*speed*dt;
+    let dy=(Math.sin(b.a)*forward+Math.sin(b.a+Math.PI/2)*strafe)*speed*dt;
+
+    const ox=b.x, oy=b.y;
+    moveEnt(b,dx,dy);
+    if(Math.hypot(b.x-ox,b.y-oy)<.15){
+      b.strafe*=-1;
+      b.wander += Math.PI*(.35+Math.random()*.65);
+      b.a=b.wander;
+    }
+
+    if(sees && d<560) shoot(b,0);
   }
 }
 
 function renderWorld(){
   const w=innerWidth,h=innerHeight;
 
+  const horizon = h/2 + recoilPitch*h*1.9;
   ctx.fillStyle="#7392a6";
-  ctx.fillRect(0,0,w,h/2);
+  ctx.fillRect(0,0,w,horizon);
   ctx.fillStyle="#454748";
-  ctx.fillRect(0,h/2,w,h/2);
+  ctx.fillRect(0,horizon,w,h-horizon);
 
   if(!running) return;
 
@@ -456,7 +495,7 @@ function renderWorld(){
     const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const shade=Math.max(35,185-d*.11)|0;
     ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
-    ctx.fillRect(x,h/2-wh/2,step+1,wh);
+    ctx.fillRect(x,horizon-wh/2,step+1,wh);
   }
 
   const entities=bots.filter(b=>b.alive).sort((a,b)=>dist(player,b)-dist(player,a));
@@ -469,26 +508,49 @@ function renderWorld(){
 
     if(los(player,e)){
       ctx.fillStyle=e.team===1?"#b83d3d":"#3e8fc8";
-      ctx.fillRect(sx-sz*.20,h/2-sz*.46,sz*.40,sz*.92);
+      ctx.fillRect(sx-sz*.20,horizon-sz*.46,sz*.40,sz*.92);
       ctx.fillStyle=e.team===1?"#8f2f2f":"#2e6e9d";
-      ctx.fillRect(sx-sz*.15,h/2-sz*.62,sz*.30,sz*.20);
+      ctx.fillRect(sx-sz*.15,horizon-sz*.62,sz*.30,sz*.20);
     }
 
     if(espOn && e.team===1){
       ctx.strokeStyle="#ff3939";
       ctx.lineWidth=2;
-      ctx.strokeRect(sx-sz*.26,h/2-sz*.68,sz*.52,sz*1.20);
+      ctx.strokeRect(sx-sz*.26,horizon-sz*.68,sz*.52,sz*1.20);
       ctx.fillStyle="white";
       ctx.font="12px Arial";
-      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,h/2-sz*.73);
+      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,horizon-sz*.73);
     }
   }
 
-  // simple weapon model
-  ctx.fillStyle="#26292b";
-  ctx.fillRect(w*.43,h*.77,w*.18,h*.23);
-  ctx.fillStyle="#717679";
-  ctx.fillRect(w*.49,h*.67,w*.035,h*.15);
+  // weapon view model + recoil animation
+  const kickY = recoilKick*34;
+  const kickX = recoilSide*w*1.7;
+  ctx.save();
+  ctx.translate(kickX, kickY);
+  if(player.weapon===0){
+    // compact assault rifle
+    ctx.fillStyle="#202427"; ctx.fillRect(w*.43,h*.80,w*.22,h*.095);
+    ctx.fillStyle="#555b5e"; ctx.fillRect(w*.49,h*.735,w*.20,h*.050);
+    ctx.fillStyle="#777d80"; ctx.fillRect(w*.665,h*.747,w*.105,h*.022);
+    ctx.fillStyle="#16191b"; ctx.fillRect(w*.535,h*.875,w*.045,h*.12);
+    ctx.fillStyle="#34383a"; ctx.fillRect(w*.455,h*.865,w*.075,h*.055);
+    ctx.fillStyle="#111"; ctx.fillRect(w*.555,h*.705,w*.055,h*.030);
+  }else if(player.weapon===1){
+    // squared service pistol
+    ctx.fillStyle="#555b60"; ctx.fillRect(w*.51,h*.78,w*.13,h*.055);
+    ctx.fillStyle="#25282a"; ctx.fillRect(w*.535,h*.83,w*.072,h*.13);
+    ctx.fillStyle="#777d80"; ctx.fillRect(w*.61,h*.792,w*.07,h*.018);
+    ctx.fillStyle="#17191b"; ctx.fillRect(w*.548,h*.955,w*.050,h*.04);
+  }else{
+    // combat knife
+    ctx.fillStyle="#c2c5c7";
+    ctx.beginPath();
+    ctx.moveTo(w*.50,h*.84); ctx.lineTo(w*.69,h*.70); ctx.lineTo(w*.57,h*.88); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#292c2e"; ctx.fillRect(w*.46,h*.86,w*.13,h*.045);
+    ctx.fillStyle="#111"; ctx.fillRect(w*.43,h*.895,w*.12,h*.07);
+  }
+  ctx.restore();
 
   ui.topInfo.textContent=`BLUE ${scoreB} : ${scoreR} RED`;
   ui.hp.textContent=`HEALTH ${Math.max(0,player.hp)}`;
@@ -528,7 +590,26 @@ function bindStick(id,state){
   el.addEventListener("pointercancel",end);
 }
 bindStick("moveStick",moveJoy);
-bindStick("lookStick",lookJoy);
+
+if(TOUCH){
+  canvas.addEventListener("pointerdown",e=>{
+    if(!running || e.clientX < innerWidth*.38) return;
+    touchLookId=e.pointerId;
+    touchLookX=e.clientX; touchLookY=e.clientY;
+    canvas.setPointerCapture?.(e.pointerId);
+  });
+  canvas.addEventListener("pointermove",e=>{
+    if(e.pointerId!==touchLookId || aimOn) return;
+    const dx=e.clientX-touchLookX;
+    const dy=e.clientY-touchLookY;
+    touchLookX=e.clientX; touchLookY=e.clientY;
+    player.a += dx*.0042;
+    recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
+  });
+  const endLook=e=>{ if(e.pointerId===touchLookId) touchLookId=null; };
+  canvas.addEventListener("pointerup",endLook);
+  canvas.addEventListener("pointercancel",endLook);
+}
 
 document.querySelectorAll(".weapon").forEach(b=>{
   b.addEventListener("pointerdown",e=>{
@@ -549,7 +630,10 @@ addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false});
 if(!TOUCH){
   canvas.addEventListener("click",()=>{if(running)canvas.requestPointerLock?.()});
   addEventListener("mousemove",e=>{
-    if(document.pointerLockElement===canvas && !aimOn) player.a += e.movementX*.0027;
+    if(document.pointerLockElement===canvas && !aimOn){
+      player.a += e.movementX*.0027;
+      recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + e.movementY*.00018));
+    }
   });
   addEventListener("mousedown",e=>{if(e.button===0&&running)firing=true});
   addEventListener("mouseup",e=>{if(e.button===0)firing=false});
