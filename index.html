@@ -1,76 +1,578 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#15191c">
-  <title>Cheat Arena</title>
-  <link rel="stylesheet" href="./css/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Cheat Arena</title>
+<style>
+:root{
+  --amber:#e7a44a;
+  --amber2:#ffd38f;
+  --dark:#101214;
+  --panel:#15191de8;
+  --safeT:env(safe-area-inset-top,0px);
+  --safeR:env(safe-area-inset-right,0px);
+  --safeB:env(safe-area-inset-bottom,0px);
+  --safeL:env(safe-area-inset-left,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0d0f;font-family:Arial,Helvetica,sans-serif;touch-action:none}
+button{font:inherit}
+#game{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#111}
+
+.hidden{display:none!important}
+
+#menu{
+  position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(390px,88vw);padding:24px;background:var(--panel);
+  border:1px solid #9b6a32;box-shadow:0 14px 48px #000c;color:white
+}
+#menu h1{margin:0;color:var(--amber2);font-size:30px;letter-spacing:.08em}
+#menu p{margin:5px 0 20px;color:#aaa}
+.menuButton{
+  display:block;width:100%;height:48px;margin:8px 0;
+  border:1px solid #79552e;background:#24282b;color:#ddd;font-weight:bold
+}
+.menuButton.primary{background:#4a341e;color:var(--amber2);border-color:#c18440}
+#serverText{font-size:12px;color:#888;margin-top:12px!important}
+
+#weaponBar{
+  position:fixed;z-index:25;top:calc(8px + var(--safeT));left:50%;transform:translateX(-50%);
+  display:flex;gap:4px;padding:4px;background:#0b0d0fdf;border:1px solid #805526;
+}
+.weapon{
+  height:48px;min-width:86px;padding:5px 10px;border:1px solid #5d4930;
+  background:#202326;color:#c98b42;font-size:12px
+}
+.weapon b{display:block;color:#eee;font-size:11px;margin-bottom:4px}
+.weapon.active{background:#594022;color:#ffd18a;border-color:#e09a46}
+
+#leftHud{
+  position:fixed;z-index:25;left:calc(12px + var(--safeL));bottom:calc(12px + var(--safeB));
+  color:var(--amber);font-weight:700;text-shadow:0 2px 3px #000;font-size:14px;line-height:1.45
+}
+#topInfo{
+  position:fixed;z-index:24;top:calc(69px + var(--safeT));left:50%;transform:translateX(-50%);
+  color:white;text-align:center;text-shadow:0 2px 4px black;font-weight:bold;font-size:13px
+}
+#cheatHud{
+  position:fixed;z-index:25;right:calc(12px + var(--safeR));bottom:calc(12px + var(--safeB));
+  text-align:right;color:#ddd;text-shadow:0 2px 3px black;font-size:12px
+}
+.cheatOn{color:#ffbd63}
+
+#crosshair{
+  position:fixed;z-index:20;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%);pointer-events:none
+}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:#ffffffc0}
+#crosshair:before{left:10px;top:2px;width:2px;height:18px}
+#crosshair:after{left:2px;top:10px;width:18px;height:2px}
+
+#touchUI{position:fixed;z-index:30;inset:0;pointer-events:none}
+.stick{
+  position:absolute;width:116px;height:116px;border-radius:50%;
+  border:2px solid #ffffff3c;background:#0004;pointer-events:auto
+}
+.stickKnob{
+  position:absolute;width:48px;height:48px;border-radius:50%;left:32px;top:32px;background:#ffffff78
+}
+#moveStick{left:calc(20px + var(--safeL));bottom:calc(25px + var(--safeB))}
+#lookStick{right:calc(20px + var(--safeR));bottom:calc(25px + var(--safeB))}
+.touchButton{
+  position:absolute;pointer-events:auto;border-radius:10px;border:1px solid #ffffff58;
+  background:#111c;color:white;font-weight:bold
+}
+#fireButton{right:calc(28px + var(--safeR));bottom:calc(164px + var(--safeB));width:88px;height:58px}
+#reloadButton{right:calc(128px + var(--safeR));bottom:calc(171px + var(--safeB));width:54px;height:45px}
+#aimButton{right:calc(16px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
+#espButton{right:calc(86px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
+.touchButton.on{background:#70471d;border-color:#ffbd63}
+
+#notice{
+  position:fixed;z-index:80;left:50%;bottom:calc(18px + var(--safeB));transform:translateX(-50%);
+  background:#000d;color:white;padding:8px 12px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .15s;pointer-events:none
+}
+#notice.show{opacity:1}
+
+#errorBox{
+  position:fixed;z-index:100;left:10px;right:10px;bottom:10px;padding:10px;
+  background:#7d1c1ce8;color:white;border:1px solid #ff8c8c;font:12px monospace;white-space:pre-wrap
+}
+
+@media(max-width:700px){
+  #weaponBar{top:calc(5px + var(--safeT))}
+  .weapon{min-width:72px;height:43px;font-size:10px;padding:4px 6px}
+  #topInfo{top:calc(57px + var(--safeT));font-size:11px}
+  #leftHud{font-size:12px;bottom:calc(150px + var(--safeB))}
+  #cheatHud{display:none}
+}
+@media(orientation:portrait) and (pointer:coarse){
+  .stick{width:100px;height:100px}
+  .stickKnob{width:42px;height:42px;left:27px;top:27px}
+  #fireButton{bottom:calc(145px + var(--safeB))}
+  #reloadButton{bottom:calc(151px + var(--safeB))}
+}
+</style>
 </head>
 <body>
-  <canvas id="game" aria-label="Cheat Arena game canvas"></canvas>
 
-  <section id="mainMenu" class="panel menu-panel">
-    <h1>CHEAT ARENA</h1>
-    <p class="subtitle">3 VS 3 FPS PROTOTYPE</p>
-    <button id="aiModeBtn" class="menu-btn primary">AI전 시작</button>
-    <button id="onlineModeBtn" class="menu-btn">온라인 3v3</button>
-    <button id="settingsBtn" class="menu-btn">설정</button>
-    <p id="onlineState" class="small-text">온라인 서버: 미설정</p>
-  </section>
+<canvas id="game"></canvas>
 
-  <section id="settingsPanel" class="panel hidden">
-    <h2>설정</h2>
-    <label>
-      마우스/터치 감도
-      <input id="sensitivity" type="range" min="0.4" max="2.2" step="0.1" value="1">
-    </label>
-    <label>
-      HUD 크기
-      <input id="hudScale" type="range" min="0.75" max="1.25" step="0.05" value="1">
-    </label>
-    <button id="settingsClose" class="menu-btn primary">완료</button>
-  </section>
+<div id="menu">
+  <h1>CHEAT ARENA</h1>
+  <p>3 VS 3 FPS PROTOTYPE</p>
+  <button id="startAI" class="menuButton primary">AI 3v3 시작</button>
+  <button id="online" class="menuButton">온라인 3v3 (준비 중)</button>
+  <p id="serverText">GitHub Pages 클라이언트 · Render 서버 미연결</p>
+</div>
 
-  <div id="topWeaponHud" class="weapon-hud hidden" aria-label="무기 선택">
-    <button class="weapon-slot active" data-weapon="0">
-      <span class="number">1</span><span class="weapon-symbol">▰</span><span>AR</span>
-    </button>
-    <button class="weapon-slot" data-weapon="1">
-      <span class="number">2</span><span class="weapon-symbol">⌐</span><span>PISTOL</span>
-    </button>
-    <button class="weapon-slot" data-weapon="2">
-      <span class="number">3</span><span class="weapon-symbol">╱</span><span>KNIFE</span>
-    </button>
-  </div>
+<div id="weaponBar" class="hidden">
+  <button class="weapon active" data-w="0"><b>1</b>AR</button>
+  <button class="weapon" data-w="1"><b>2</b>PISTOL</button>
+  <button class="weapon" data-w="2"><b>3</b>KNIFE</button>
+</div>
 
-  <div id="statusHud" class="hidden">
-    <div id="scoreText">BLUE 0 : 0 RED</div>
-    <div id="roundText">ROUND 1</div>
-    <div id="healthText">HEALTH 100</div>
-    <div id="ammoText">AR · 30 / 30</div>
-    <div id="cheatText">AIM OFF · ESP OFF</div>
-    <div id="kdText">K/D 0/0</div>
-  </div>
+<div id="topInfo" class="hidden">BLUE 0 : 0 RED</div>
 
-  <div id="killFeed"></div>
-  <div id="crosshair" class="hidden"></div>
-  <div id="deviceBadge"></div>
-  <div id="toast"></div>
+<div id="leftHud" class="hidden">
+  <div id="hp">HEALTH 100</div>
+  <div id="ammo">AR 30 / 30</div>
+  <div id="kd">K/D 0 / 0</div>
+</div>
 
-  <div id="touchControls" class="hidden">
-    <div id="movePad" class="pad"><div class="knob"></div><span>MOVE</span></div>
-    <div id="lookPad" class="pad"><div class="knob"></div><span>LOOK</span></div>
-    <button id="fireBtn" class="touch-btn fire">FIRE</button>
-    <button id="reloadBtn" class="touch-btn reload">R</button>
-    <button id="aimBtn" class="touch-btn cheat aim">AIM</button>
-    <button id="espBtn" class="touch-btn cheat esp">ESP</button>
-    <button id="menuBtn" class="touch-btn menu">☰</button>
-  </div>
+<div id="cheatHud" class="hidden">
+  <div id="aimState">F1 AIM OFF</div>
+  <div id="espState">F2 ESP OFF</div>
+</div>
 
-  <script src="./js/config.js"></script>
-  <script src="./js/platform.js"></script>
-  <script src="./js/net.js"></script>
-  <script src="./js/game.js"></script>
+<div id="crosshair" class="hidden"></div>
+
+<div id="touchUI" class="hidden">
+  <div id="moveStick" class="stick"><div class="stickKnob"></div></div>
+  <div id="lookStick" class="stick"><div class="stickKnob"></div></div>
+  <button id="fireButton" class="touchButton">FIRE</button>
+  <button id="reloadButton" class="touchButton">R</button>
+  <button id="aimButton" class="touchButton">AIM</button>
+  <button id="espButton" class="touchButton">ESP</button>
+</div>
+
+<div id="notice"></div>
+<div id="errorBox" class="hidden"></div>
+
+<script>
+"use strict";
+
+window.addEventListener("error", e => {
+  const box = document.getElementById("errorBox");
+  box.classList.remove("hidden");
+  box.textContent = "GAME ERROR\\n" + (e.message || "Unknown error") +
+    (e.filename ? "\\n" + e.filename + ":" + e.lineno : "");
+});
+
+const $ = id => document.getElementById(id);
+const canvas = $("game");
+const ctx = canvas.getContext("2d");
+if (!ctx) throw new Error("Canvas 2D context unavailable.");
+
+const ui = {
+  menu:$("menu"), startAI:$("startAI"), online:$("online"),
+  weaponBar:$("weaponBar"), topInfo:$("topInfo"), leftHud:$("leftHud"),
+  cheatHud:$("cheatHud"), crosshair:$("crosshair"), touchUI:$("touchUI"),
+  hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"),
+  fire:$("fireButton"), reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"),
+  notice:$("notice")
+};
+
+const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+const TOUCH = (navigator.maxTouchPoints || 0) > 0 && coarse;
+
+const TILE = 64;
+const FOV = Math.PI / 3;
+const TWO_PI = Math.PI * 2;
+
+const MAP = [
+"####################",
+"#..................#",
+"#..................#",
+"#....##............#",
+"#....##......##....#",
+"#............##....#",
+"#..................#",
+"#.......###........#",
+"#.......###........#",
+"#..................#",
+"#..##..............#",
+"#..##.......###....#",
+"#...........###....#",
+"#..................#",
+"#......##..........#",
+"#......##..........#",
+"#..................#",
+"####################"
+];
+
+const WEAPONS = [
+  {name:"AR", damage:22, rate:7.5, mag:30, range:720, spread:.075},
+  {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065},
+  {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70}
+];
+
+const player = {
+  x:2.5*TILE, y:2.5*TILE, a:0,
+  hp:100, team:0, weapon:0, ammo:[30,12,999],
+  nextShot:0, kills:0, deaths:0, alive:true
+};
+
+const blueSpawn = [[3,2],[2,4]];
+const redSpawn = [[16,14],[15,15],[17,13]];
+
+function botAt(pos, team, name){
+  return {x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true};
+}
+const bots = [
+  botAt(blueSpawn[0],0,"BLUE-2"),
+  botAt(blueSpawn[1],0,"BLUE-3"),
+  botAt(redSpawn[0],1,"RED-1"),
+  botAt(redSpawn[1],1,"RED-2"),
+  botAt(redSpawn[2],1,"RED-3")
+];
+
+let running = false;
+let aimOn = false;
+let espOn = false;
+let scoreB = 0;
+let scoreR = 0;
+let firing = false;
+let last = performance.now();
+let gameTime = 0;
+const keys = Object.create(null);
+const moveJoy = {x:0,y:0};
+const lookJoy = {x:0,y:0};
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.floor(innerWidth*dpr));
+  canvas.height = Math.max(1, Math.floor(innerHeight*dpr));
+  canvas.style.width = innerWidth+"px";
+  canvas.style.height = innerHeight+"px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize", resize, {passive:true});
+resize();
+
+function notify(text){
+  ui.notice.textContent = text;
+  ui.notice.classList.add("show");
+  clearTimeout(notify.t);
+  notify.t = setTimeout(()=>ui.notice.classList.remove("show"),1400);
+}
+
+function wall(x,y){
+  const gx = Math.floor(x/TILE);
+  const gy = Math.floor(y/TILE);
+  if (gy < 0 || gx < 0 || gy >= MAP.length || gx >= MAP[0].length) return true;
+  return MAP[gy][gx] === "#";
+}
+
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function angle(a,b){ return Math.atan2(b.y-a.y,b.x-a.x); }
+function norm(a){
+  while(a > Math.PI) a -= TWO_PI;
+  while(a < -Math.PI) a += TWO_PI;
+  return a;
+}
+
+function moveEnt(e,dx,dy){
+  const r = 9;
+  if(!wall(e.x+dx+Math.sign(dx)*r,e.y)) e.x += dx;
+  if(!wall(e.x,e.y+dy+Math.sign(dy)*r)) e.y += dy;
+}
+
+function los(a,b){
+  const d = dist(a,b);
+  for(let i=10;i<d;i+=10){
+    const t=i/d;
+    if(wall(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t)) return false;
+  }
+  return true;
+}
+
+function enemyList(team){
+  if(team===0) return bots.filter(b=>b.team===1 && b.alive);
+  return [player,...bots.filter(b=>b.team===0)].filter(e=>e.alive);
+}
+
+function spawnEntity(e){
+  let p;
+  if(e===player){
+    p=[2.5,2.5];
+  }else{
+    const list = e.team===0 ? blueSpawn : redSpawn;
+    p=list[Math.floor(Math.random()*list.length)];
+  }
+  e.x=p[0]*TILE;
+  e.y=p[1]*TILE;
+  e.hp=100;
+  e.alive=true;
+  if(e===player) player.ammo=[30,12,999];
+}
+
+function killEntity(victim,killer){
+  if(!victim.alive) return;
+  victim.alive=false;
+  victim.hp=0;
+  const team = killer===player ? 0 : killer.team;
+  if(team===0) scoreB++; else scoreR++;
+  if(killer===player) player.kills++;
+  if(victim===player) player.deaths++;
+  setTimeout(()=>spawnEntity(victim),900);
+}
+
+function shoot(shooter,wIndex){
+  if(!shooter.alive) return;
+  const w=WEAPONS[wIndex];
+  if(gameTime < shooter.nextShot) return;
+  if(shooter===player && wIndex<2 && player.ammo[wIndex]<=0){
+    notify("탄약 없음");
+    return;
+  }
+  shooter.nextShot=gameTime+1/w.rate;
+  if(shooter===player && wIndex<2) player.ammo[wIndex]--;
+
+  let best=null,bestScore=Infinity;
+  for(const t of enemyList(shooter===player?0:shooter.team)){
+    const d=dist(shooter,t);
+    if(d>w.range || !los(shooter,t)) continue;
+    const da=Math.abs(norm(angle(shooter,t)-shooter.a));
+    if(da>w.spread) continue;
+    const s=da+d/12000;
+    if(s<bestScore){best=t;bestScore=s;}
+  }
+  if(best){
+    best.hp-=w.damage;
+    if(best.hp<=0) killEntity(best,shooter);
+  }
+}
+
+function reload(){
+  if(player.weapon<2){
+    player.ammo[player.weapon]=WEAPONS[player.weapon].mag;
+    notify("재장전");
+  }
+}
+
+function selectWeapon(i){
+  player.weapon=Math.max(0,Math.min(2,i));
+  document.querySelectorAll(".weapon").forEach((b,n)=>b.classList.toggle("active",n===player.weapon));
+}
+
+function toggleAim(){
+  aimOn=!aimOn;
+  ui.aim.classList.toggle("on",aimOn);
+}
+function toggleEsp(){
+  espOn=!espOn;
+  ui.esp.classList.toggle("on",espOn);
+}
+
+function startGame(){
+  running=true;
+  ui.menu.classList.add("hidden");
+  ui.weaponBar.classList.remove("hidden");
+  ui.topInfo.classList.remove("hidden");
+  ui.leftHud.classList.remove("hidden");
+  ui.cheatHud.classList.remove("hidden");
+  ui.crosshair.classList.remove("hidden");
+  if(TOUCH) ui.touchUI.classList.remove("hidden");
+  player.kills=player.deaths=scoreB=scoreR=0;
+  spawnEntity(player);
+  bots.forEach(spawnEntity);
+  notify("AI 3v3 시작");
+}
+ui.startAI.addEventListener("click",startGame);
+ui.online.addEventListener("click",()=>notify("Render 서버 붙인 뒤 활성화 예정"));
+
+function updatePlayer(dt){
+  if(!player.alive) return;
+  let f=0,s=0;
+  if(TOUCH){
+    f=-moveJoy.y;
+    s=moveJoy.x;
+    if(!aimOn) player.a += lookJoy.x*dt*3.1;
+  }else{
+    f=(keys["w"]?1:0)-(keys["s"]?1:0);
+    s=(keys["d"]?1:0)-(keys["a"]?1:0);
+  }
+
+  if(aimOn){
+    const target=enemyList(0).filter(e=>los(player,e)).sort((a,b)=>dist(player,a)-dist(player,b))[0];
+    if(target) player.a += norm(angle(player,target)-player.a)*Math.min(1,dt*11);
+  }
+
+  const l=Math.hypot(f,s);
+  if(l>1){f/=l;s/=l;}
+  const speed=150;
+  const dx=(Math.cos(player.a)*f+Math.cos(player.a+Math.PI/2)*s)*speed*dt;
+  const dy=(Math.sin(player.a)*f+Math.sin(player.a+Math.PI/2)*s)*speed*dt;
+  moveEnt(player,dx,dy);
+  if(firing) shoot(player,player.weapon);
+}
+
+function updateBots(dt){
+  for(const b of bots){
+    if(!b.alive) continue;
+    const es=enemyList(b.team);
+    if(!es.length) continue;
+    es.sort((a,z)=>dist(b,a)-dist(b,z));
+    const t=es[0];
+    b.a=angle(b,t);
+    const d=dist(b,t);
+    if(d>150){
+      moveEnt(b,Math.cos(b.a)*70*dt,Math.sin(b.a)*70*dt);
+    }
+    if(d<560 && los(b,t)) shoot(b,0);
+  }
+}
+
+function renderWorld(){
+  const w=innerWidth,h=innerHeight;
+
+  ctx.fillStyle="#7392a6";
+  ctx.fillRect(0,0,w,h/2);
+  ctx.fillStyle="#454748";
+  ctx.fillRect(0,h/2,w,h/2);
+
+  if(!running) return;
+
+  const step = w > 900 ? 2 : 3;
+  for(let x=0;x<w;x+=step){
+    const ra=player.a-FOV/2+(x/w)*FOV;
+    let d=2;
+    while(d<1400){
+      if(wall(player.x+Math.cos(ra)*d,player.y+Math.sin(ra)*d)) break;
+      d+=5;
+    }
+    d*=Math.cos(ra-player.a);
+    const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
+    const shade=Math.max(35,185-d*.11)|0;
+    ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(x,h/2-wh/2,step+1,wh);
+  }
+
+  const entities=bots.filter(b=>b.alive).sort((a,b)=>dist(player,b)-dist(player,a));
+  for(const e of entities){
+    const d=dist(player,e);
+    const da=norm(angle(player,e)-player.a);
+    if(Math.abs(da)>FOV*.68) continue;
+    const sx=w/2+(da/FOV)*w;
+    const sz=Math.min(h*.72,17000/Math.max(d,1));
+
+    if(los(player,e)){
+      ctx.fillStyle=e.team===1?"#b83d3d":"#3e8fc8";
+      ctx.fillRect(sx-sz*.20,h/2-sz*.46,sz*.40,sz*.92);
+      ctx.fillStyle=e.team===1?"#8f2f2f":"#2e6e9d";
+      ctx.fillRect(sx-sz*.15,h/2-sz*.62,sz*.30,sz*.20);
+    }
+
+    if(espOn && e.team===1){
+      ctx.strokeStyle="#ff3939";
+      ctx.lineWidth=2;
+      ctx.strokeRect(sx-sz*.26,h/2-sz*.68,sz*.52,sz*1.20);
+      ctx.fillStyle="white";
+      ctx.font="12px Arial";
+      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,h/2-sz*.73);
+    }
+  }
+
+  // simple weapon model
+  ctx.fillStyle="#26292b";
+  ctx.fillRect(w*.43,h*.77,w*.18,h*.23);
+  ctx.fillStyle="#717679";
+  ctx.fillRect(w*.49,h*.67,w*.035,h*.15);
+
+  ui.topInfo.textContent=`BLUE ${scoreB} : ${scoreR} RED`;
+  ui.hp.textContent=`HEALTH ${Math.max(0,player.hp)}`;
+  const wp=WEAPONS[player.weapon];
+  ui.ammo.textContent=player.weapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`;
+  ui.kd.textContent=`K/D ${player.kills} / ${player.deaths}`;
+  ui.aimState.textContent=`F1 AIM ${aimOn?"ON":"OFF"}`;
+  ui.aimState.classList.toggle("cheatOn",aimOn);
+  ui.espState.textContent=`F2 ESP ${espOn?"ON":"OFF"}`;
+  ui.espState.classList.toggle("cheatOn",espOn);
+}
+
+function bindStick(id,state){
+  const el=$(id),knob=el.querySelector(".stickKnob");
+  let pid=null;
+  function upd(e){
+    const r=el.getBoundingClientRect();
+    let dx=e.clientX-r.left-r.width/2;
+    let dy=e.clientY-r.top-r.height/2;
+    const m=r.width*.31;
+    const l=Math.hypot(dx,dy)||1;
+    if(l>m){dx*=m/l;dy*=m/l;}
+    state.x=dx/m;state.y=dy/m;
+    knob.style.transform=`translate(${dx}px,${dy}px)`;
+  }
+  el.addEventListener("pointerdown",e=>{
+    pid=e.pointerId;
+    el.setPointerCapture?.(pid);
+    upd(e);
+  });
+  el.addEventListener("pointermove",e=>{if(e.pointerId===pid)upd(e)});
+  function end(e){
+    if(e.pointerId!==pid)return;
+    pid=null;state.x=state.y=0;knob.style.transform="";
+  }
+  el.addEventListener("pointerup",end);
+  el.addEventListener("pointercancel",end);
+}
+bindStick("moveStick",moveJoy);
+bindStick("lookStick",lookJoy);
+
+document.querySelectorAll(".weapon").forEach(b=>{
+  b.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    selectWeapon(Number(b.dataset.w));
+  });
+});
+
+addEventListener("keydown",e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(["1","2","3"].includes(e.key))selectWeapon(Number(e.key)-1);
+  if(e.key.toLowerCase()==="r")reload();
+  if(e.key==="F1"){e.preventDefault();toggleAim();}
+  if(e.key==="F2"){e.preventDefault();toggleEsp();}
+});
+addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false});
+
+if(!TOUCH){
+  canvas.addEventListener("click",()=>{if(running)canvas.requestPointerLock?.()});
+  addEventListener("mousemove",e=>{
+    if(document.pointerLockElement===canvas && !aimOn) player.a += e.movementX*.0027;
+  });
+  addEventListener("mousedown",e=>{if(e.button===0&&running)firing=true});
+  addEventListener("mouseup",e=>{if(e.button===0)firing=false});
+}
+
+ui.fire.addEventListener("pointerdown",e=>{e.preventDefault();firing=true});
+["pointerup","pointercancel","pointerleave"].forEach(n=>ui.fire.addEventListener(n,()=>firing=false));
+ui.reload.addEventListener("click",reload);
+ui.aim.addEventListener("click",toggleAim);
+ui.esp.addEventListener("click",toggleEsp);
+
+function loop(now){
+  const dt=Math.min(.033,(now-last)/1000);
+  last=now;
+  gameTime+=dt;
+  if(running){
+    updatePlayer(dt);
+    updateBots(dt);
+  }
+  renderWorld();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
 </body>
 </html>
