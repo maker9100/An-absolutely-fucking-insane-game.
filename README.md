@@ -1,14 +1,11 @@
-# Cheat Arena - Weapons + Graphics pass
+# Cheat Arena HOTFIX-2
 
-업데이트:
-- 무기 5종: AR / Pistol / Knife / Shotgun / Crossbow
-- Shotgun: 8펠릿, 강한 반동, 근거리 특화
-- Crossbow: 실제 이동하는 볼트 투사체, 1발 장전, 고화력
-- 1~5 키 및 상단 무기 버튼 지원
-- 무기별 뷰모델 추가
-- 총구 화염 / 히트마커 / 볼트와 충돌 이펙트
-- 하늘/바닥 그라데이션과 벽 패널 음영으로 1차 그래픽 업스케일
-- 기존 5v5 AI, 화면 탭 발사, 드래그 시점, AIM/ESP 유지
+이 빌드는 두 가지를 동시에 처리합니다.
 
-주의:
-- Firebase 비밀키/서비스 계정은 포함하지 않았습니다.
+1. 벽 렌더러의 `hit.d`를 확실히 `d`로 교체했습니다.
+2. 혹시 다른 오래된 코드 조각에서 `hit.d`가 남아 있어도 즉시 크래시하지 않도록 전역 fallback을 추가했습니다.
+3. 좌측 상단에 `BUILD 2026-08-31 HOTFIX-2` 배지를 표시합니다.
+   이 글자가 안 보이면 GitHub Pages 또는 Safari가 이전 index.html을 보여주는 것입니다.
+4. HTML 캐시 방지 meta 태그를 추가했습니다.
+
+ZIP을 통째로 저장소에 올리는 것이 아니라 ZIP을 풀고 루트의 index.html을 교체하세요.

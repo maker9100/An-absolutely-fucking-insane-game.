@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Cheat Arena</title>
@@ -108,9 +111,19 @@ button{font:inherit}
   .stick{width:100px;height:100px}
   .stickKnob{width:42px;height:42px;left:27px;top:27px}
 }
+
+#buildBadge{
+  position:fixed;left:8px;top:8px;z-index:99999;
+  padding:5px 8px;border:1px solid rgba(255,255,255,.25);
+  border-radius:6px;background:rgba(0,0,0,.55);
+  color:#fff;font:12px/1.2 monospace;pointer-events:none;
+}
+
 </style>
 </head>
 <body>
+<div id="buildBadge">BUILD 2026-08-31 HOTFIX-2</div>
+
 
 <canvas id="game"></canvas>
 
@@ -596,7 +609,7 @@ function renderWorld(){
     const shade=Math.max(35,185-d*.11)|0;
     ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
     ctx.fillRect(x,horizon-wh/2,step+1,wh);
-    if((Math.floor(x/step)+Math.floor(hit.d/70))%7===0){
+    if((Math.floor(x/step)+Math.floor(d/70))%7===0){
       ctx.fillStyle="rgba(255,255,255,.055)";
       ctx.fillRect(x,horizon-wh/2,1,wh);
     }
