@@ -1,12 +1,10 @@
-# Cheat Arena 5v5 update
+# Cheat Arena - Tap Fire update
 
-- AI battle: 5v5 (player + 4 allies vs 5 enemies)
-- Mobile camera: swipe/drag on the play area; right look joystick removed
-- Desktop camera: pointer-lock mouse look
-- Weapon-specific view models: AR, pistol, knife
-- Camera + weapon recoil
-- AI movement: pursuit, retreat, strafing, wandering, basic wall recovery
-- AIM / ESP preserved
-- Online button remains a placeholder; merge your existing Firebase initialization/network layer rather than exposing private credentials.
+변경 사항:
+- 모바일 FIRE 버튼 제거
+- 화면 짧은 탭 = 발사
+- 화면 드래그 = 시점 회전
+- 더블탭/연속 탭으로 브라우저 확대되지 않도록 확대 제스처 차단
+- 기존 5v5 AI, 반동, 무기 모델, AIM/ESP 유지
 
-Upload index.html and .nojekyll to the GitHub Pages root.
+GitHub Pages 저장소 루트에 index.html과 .nojekyll을 올리면 됩니다.

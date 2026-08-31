@@ -15,10 +15,10 @@
   --safeB:env(safe-area-inset-bottom,0px);
   --safeL:env(safe-area-inset-left,0px);
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0d0f;font-family:Arial,Helvetica,sans-serif;touch-action:none}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0d0f;font-family:Arial,Helvetica,sans-serif;touch-action:none;overscroll-behavior:none}
 button{font:inherit}
-#game{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#111}
+#game{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#111;touch-action:none}
 
 .hidden{display:none!important}
 
@@ -81,7 +81,6 @@ button{font:inherit}
   position:absolute;pointer-events:auto;border-radius:10px;border:1px solid #ffffff58;
   background:#111c;color:white;font-weight:bold
 }
-#fireButton{right:calc(24px + var(--safeR));bottom:calc(34px + var(--safeB));width:92px;height:62px}
 #reloadButton{right:calc(126px + var(--safeR));bottom:calc(42px + var(--safeB));width:54px;height:45px}
 #aimButton{right:calc(16px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
 #espButton{right:calc(86px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
@@ -146,7 +145,6 @@ button{font:inherit}
 
 <div id="touchUI" class="hidden">
   <div id="moveStick" class="stick"><div class="stickKnob"></div></div>
-  <button id="fireButton" class="touchButton">FIRE</button>
   <button id="reloadButton" class="touchButton">R</button>
   <button id="aimButton" class="touchButton">AIM</button>
   <button id="espButton" class="touchButton">ESP</button>
@@ -175,7 +173,7 @@ const ui = {
   weaponBar:$("weaponBar"), topInfo:$("topInfo"), leftHud:$("leftHud"),
   cheatHud:$("cheatHud"), crosshair:$("crosshair"), touchUI:$("touchUI"),
   hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"),
-  fire:$("fireButton"), reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"),
+  reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"),
   notice:$("notice")
 };
 
@@ -592,25 +590,61 @@ function bindStick(id,state){
 bindStick("moveStick",moveJoy);
 
 if(TOUCH){
+  let touchStartX=0, touchStartY=0, touchStartTime=0, touchDragged=false;
+
   canvas.addEventListener("pointerdown",e=>{
-    if(!running || e.clientX < innerWidth*.38) return;
+    if(!running || e.clientX < innerWidth*.30) return;
     touchLookId=e.pointerId;
     touchLookX=e.clientX; touchLookY=e.clientY;
+    touchStartX=e.clientX; touchStartY=e.clientY;
+    touchStartTime=performance.now();
+    touchDragged=false;
     canvas.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
   });
+
   canvas.addEventListener("pointermove",e=>{
-    if(e.pointerId!==touchLookId || aimOn) return;
+    if(e.pointerId!==touchLookId) return;
     const dx=e.clientX-touchLookX;
     const dy=e.clientY-touchLookY;
     touchLookX=e.clientX; touchLookY=e.clientY;
-    player.a += dx*.0042;
-    recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
-  });
-  const endLook=e=>{ if(e.pointerId===touchLookId) touchLookId=null; };
-  canvas.addEventListener("pointerup",endLook);
-  canvas.addEventListener("pointercancel",endLook);
-}
 
+    if(Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY)>8) touchDragged=true;
+
+    if(!aimOn){
+      player.a += dx*.0042;
+      recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
+    }
+    e.preventDefault();
+  });
+
+  const endLook=e=>{
+    if(e.pointerId!==touchLookId) return;
+
+    const elapsed=performance.now()-touchStartTime;
+    const moved=Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY);
+
+    // 짧은 탭 = 1발. 드래그 = 시점 회전.
+    if(running && !touchDragged && moved<10 && elapsed<350){
+      shoot(player,player.weapon);
+    }
+
+    touchLookId=null;
+    e.preventDefault();
+  };
+
+  canvas.addEventListener("pointerup",endLook);
+  canvas.addEventListener("pointercancel",e=>{
+    if(e.pointerId===touchLookId) touchLookId=null;
+    e.preventDefault();
+  });
+
+  // iOS/Safari의 연속 탭 확대 제스처 차단.
+  canvas.addEventListener("dblclick",e=>e.preventDefault());
+  document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});
+  document.addEventListener("gesturechange",e=>e.preventDefault(),{passive:false});
+  document.addEventListener("gestureend",e=>e.preventDefault(),{passive:false});
+}
 document.querySelectorAll(".weapon").forEach(b=>{
   b.addEventListener("pointerdown",e=>{
     e.preventDefault();
@@ -639,8 +673,6 @@ if(!TOUCH){
   addEventListener("mouseup",e=>{if(e.button===0)firing=false});
 }
 
-ui.fire.addEventListener("pointerdown",e=>{e.preventDefault();firing=true});
-["pointerup","pointercancel","pointerleave"].forEach(n=>ui.fire.addEventListener(n,()=>firing=false));
 ui.reload.addEventListener("click",reload);
 ui.aim.addEventListener("click",toggleAim);
 ui.esp.addEventListener("click",toggleEsp);
