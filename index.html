@@ -181,7 +181,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-01 AUTORELOAD-FOV103</div>
+<div id="buildBadge">BUILD 2026-09-01 MAC-NORECOIL</div>
 
 
 <canvas id="game"></canvas>
@@ -222,6 +222,7 @@ button{font:inherit}
   <button id="reloadButton" class="touchButton">R</button>
   <button id="aimButton" class="touchButton">AIM</button>
   <button id="espButton" class="touchButton">ESP</button>
+<button id="noRecoilButton" class="toggle">NO RECOIL</button>
 </div>
 
 <div id="notice"></div>
@@ -284,12 +285,13 @@ const WEAPONS = [
   {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065, type:"hitscan"},
   {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70, type:"melee"},
   {name:"SHOTGUN", damage:15, rate:1.05, mag:6, range:390, spread:.24, type:"shotgun", pellets:8},
-  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"}
+  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"},
+  {name:"MAC", damage:34, rate:10.0, mag:100, range:820, spread:.095, type:"hitscan"}
 ];
 
 const player = {
   x:2.5*TILE, y:2.5*TILE, a:0,
-  hp:100, team:0, weapon:0, ammo:[30,12,999,6,1],
+  hp:100, team:0, weapon:0, ammo:[30,12,999,6,1,100],
   nextShot:0, kills:0, deaths:0, alive:true
 };
 
@@ -406,7 +408,7 @@ function spawnEntity(e){
   e.y=p[1]*TILE;
   e.hp=100;
   e.alive=true;
-  if(e===player) player.ammo=[30,12,999,6,1];
+  if(e===player) player.ammo=[30,12,999,6,1,100];
 }
 
 function killEntity(victim,killer){
@@ -455,7 +457,7 @@ function beginNextRound(){
   roundOver=false;
   player.hp=100; player.alive=true;
   player.x=3*TILE; player.y=3*TILE; player.a=0;
-  player.ammo=[30,12,999,6,1];
+  player.ammo=[30,12,999,6,1,100];
   player.nextShot=0;
 
   let bi=0, ri=0;
@@ -485,7 +487,7 @@ function finishMatch(winnerTeam){
     roundRestartAt=0;
     player.hp=100;
     player.alive=true;
-    player.ammo=[30,12,999,6,1];
+    player.ammo=[30,12,999,6,1,100];
     bolts.length=0;
     impacts.length=0;
     bloodFx.length=0;
@@ -586,12 +588,14 @@ function shoot(shooter,wIndex){
     setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reload(); },80);
   }
 
-    const recoilTable=[.018,.052,.025,.095,.070];
-    const kickTable=[.42,.75,.32,1.25,.90];
-    const sideTable=[.010,.018,.006,.032,.012];
-    recoilPitch=Math.min(.24,recoilPitch+recoilTable[wIndex]);
-    recoilKick=Math.min(1.35,recoilKick+kickTable[wIndex]);
-    recoilSide+=(Math.random()-.5)*sideTable[wIndex];
+    // Knife: zero recoil. MAC: deliberately absurd recoil unless NO RECOIL is enabled.
+    const recoilTable=[.018,.052,0,.095,.070,.155];
+    const kickTable=[.42,.75,0,1.25,.90,1.95];
+    const sideTable=[.010,.018,0,.032,.012,.075];
+    const mult=noRecoilOn?0:1;
+    recoilPitch=Math.min(.42,recoilPitch+recoilTable[wIndex]*mult);
+    recoilKick=Math.min(2.20,recoilKick+kickTable[wIndex]*mult);
+    recoilSide+=(Math.random()-.5)*sideTable[wIndex]*mult;
     player.a+=recoilSide;
     muzzleFlash = wIndex===2 ? 0 : .075;
   }
@@ -981,7 +985,7 @@ function renderWorld(){
     ctx.fillStyle="#2d3234";ctx.fillRect(w*.39,h*.79,w*.12,h*.055);
     ctx.fillStyle="#9a7047";ctx.fillRect(w*.405,h*.804,w*.045,h*.012);
     ctx.fillStyle="#33251c";ctx.beginPath();ctx.moveTo(w*.34,h*.855);ctx.lineTo(w*.43,h*.855);ctx.lineTo(w*.37,h*.95);ctx.lineTo(w*.31,h*.94);ctx.closePath();ctx.fill();
-  }else{
+  }else if(player.weapon===4){
     // Crossbow: stock, rail, limbs, string, loaded bolt, optic
     ctx.fillStyle="#33261e";ctx.fillRect(w*.405,h*.84,w*.255,h*.055);
     ctx.fillStyle="#5e676a";ctx.fillRect(w*.49,h*.772,w*.23,h*.025);
@@ -1125,6 +1129,10 @@ document.querySelectorAll(".weapon").forEach(b=>{
   });
 });
 
+document.getElementById("noRecoilButton").onclick=()=>{
+ noRecoilOn=!noRecoilOn;
+ document.getElementById("noRecoilButton").classList.toggle("on",noRecoilOn);
+};
 addEventListener("keydown",e=>{
   keys[e.key.toLowerCase()]=true;
   if(["1","2","3","4","5"].includes(e.key))selectWeapon(Number(e.key)-1);
@@ -1166,12 +1174,19 @@ function loop(now){
       updateBloodFx(dt);
       checkRoundEnd();
     }
-  }
-  renderWorld();
-  requestAnimationFrame(loop);
-}
-updateRoundHud();
-requestAnimationFrame(loop);
-</script>
-</body>
-</html>
+  }else{
+    // MAC: M240-inspired belt-fed machine gun
+    ctx.fillStyle="#24292b";ctx.fillRect(w*.34,h*.805,w*.34,h*.085);
+    ctx.fillStyle="#555d60";ctx.fillRect(w*.40,h*.775,w*.22,h*.035);
+    ctx.fillStyle="#697174";ctx.fillRect(w*.64,h*.79,w*.20,h*.018);
+    ctx.fillStyle="#343a3c";ctx.fillRect(w*.63,h*.817,w*.17,h*.014);
+    ctx.fillStyle="#111416";ctx.fillRect(w*.835,h*.793,w*.065,h*.010);
+    for(let i=0;i<6;i++){ctx.fillStyle="#111";ctx.fillRect(w*(.625+i*.027),h*.782,w*.012,h*.008);}
+    ctx.strokeStyle="#555d60";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(w*.48,h*.778);ctx.lineTo(w*.50,h*.735);ctx.lineTo(w*.57,h*.735);ctx.lineTo(w*.59,h*.778);ctx.stroke();
+    ctx.fillStyle="#101314";ctx.fillRect(w*.585,h*.748,w*.015,h*.035);
+    ctx.fillStyle="#303638";ctx.fillRect(w*.42,h*.875,w*.13,h*.105);
+    ctx.fillStyle="#697174";ctx.fillRect(w*.43,h*.885,w*.11,h*.014);
+    for(let i=0;i<5;i++){ctx.fillStyle="#a58a52";ctx.fillRect(w*(.535+i*.013),h*.855,w*.009,h*.025);}
+    ctx.fillStyle="#171a1b";ctx.beginPath();ctx.moveTo(w*.55,h*.875);ctx.lineTo(w*.60,h*.875);ctx.lineTo(w*.585,h*.985);ctx.lineTo(w*.55,h*.97);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#202426";ctx.beginPath();ctx.moveTo(w*.34,h*.835);ctx.lineTo(w*.405,h*.845);ctx.lineTo(w*.36,h*.945);ctx.lineTo(w*.29,h*.93);ctx.closePath();ctx.fill();
+
