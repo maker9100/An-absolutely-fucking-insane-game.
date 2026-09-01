@@ -181,7 +181,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-01 NO-RESPAWN</div>
+<div id="buildBadge">BUILD 2026-09-01 AUTORELOAD-FOV103</div>
 
 
 <canvas id="game"></canvas>
@@ -255,7 +255,7 @@ const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matche
 const TOUCH = (navigator.maxTouchPoints || 0) > 0 && coarse;
 
 const TILE = 64;
-const FOV = Math.PI / 3;
+const FOV = 103*Math.PI/180;
 const TWO_PI = Math.PI * 2;
 
 const MAP = [
@@ -470,11 +470,34 @@ function beginNextRound(){
 
 function finishMatch(winnerTeam){
   roundOver=true;
+  roundRestartAt=0;
   const msg=winnerTeam===0?"BLUE TEAM WINS":"RED TEAM WINS";
   notify(msg);
   setTimeout(()=>{
-    blueRoundWins=0; redRoundWins=0; roundNumber=1;
-    beginNextRound();
+    running=false;
+    document.exitPointerLock?.();
+
+    // Reset match state for the next time PLAY is pressed.
+    blueRoundWins=0;
+    redRoundWins=0;
+    roundNumber=1;
+    roundOver=false;
+    roundRestartAt=0;
+    player.hp=100;
+    player.alive=true;
+    player.ammo=[30,12,999,6,1];
+    bolts.length=0;
+    impacts.length=0;
+    bloodFx.length=0;
+    damageFlash=0;
+    updateRoundHud();
+
+    // Return to the existing lobby/menu instead of starting round 1 again.
+    if(ui.menu) ui.menu.style.display="flex";
+    const dn=document.getElementById("deathNotice");
+    if(dn) dn.style.display="none";
+    const dmg=document.getElementById("damageOverlay");
+    if(dmg) dmg.style.opacity="0";
   },1800);
 }
 
@@ -542,6 +565,10 @@ function fireBolt(shooter,w){
 }
 
 function shoot(shooter,wIndex){
+  if(shooter===player && player.weapon!==2 && player.ammo[wIndex]<=0){
+    reload();
+    return;
+  }
   if(!shooter.alive) return;
   const w=WEAPONS[wIndex];
   if(!w || gameTime < shooter.nextShot) return;
@@ -555,6 +582,9 @@ function shoot(shooter,wIndex){
 
   if(shooter===player){
     if(wIndex!==2) player.ammo[wIndex]--;
+  if(shooter===player && wIndex!==2 && player.ammo[wIndex]<=0){
+    setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reload(); },80);
+  }
 
     const recoilTable=[.018,.052,.025,.095,.070];
     const kickTable=[.42,.75,.32,1.25,.90];
