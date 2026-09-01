@@ -1,13 +1,9 @@
-# Cheat Arena ROUND-FX
+# Cheat Arena NO-RESPAWN
 
-추가:
-- 적/아군 피격 시 혈흔 파티클 연출
-- 플레이어 피격 시 화면 가장자리 빨간 피해 오버레이
-- AI전과 전투 로직 공통 라운드 시스템
-- 라운드 승리 조건: 상대 팀 전멸
-- 먼저 5라운드를 따낸 팀이 매치 승리
-- 라운드 종료 후 자동 초기화 및 다음 라운드 시작
-
-주의:
-- 현재 온라인 네트워크 계층 자체는 기존 Firebase/온라인 구현에 연결되어야 합니다.
-- 라운드 로직은 공통 전투 시스템으로 작성되어 있어 온라인 동기화 시 같은 승리 규칙을 사용하도록 확장할 수 있습니다.
+Fix:
+- Removed the 900ms mid-round respawn timer.
+- Dead players and bots stay dead for the rest of the round.
+- Everyone respawns only when beginNextRound() starts the next round.
+- Dead player cannot move.
+- Added ELIMINATED / WAIT FOR NEXT ROUND notice.
+- First-to-5 round system remains unchanged.

@@ -155,6 +155,14 @@ button{font:inherit}
   #roundScore{font-size:18px}
 }
 
+
+#deathNotice{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  z-index:58;display:none;text-align:center;color:#fff;
+  font:900 28px/1.05 Arial;letter-spacing:.08em;
+  text-shadow:0 2px 6px #000;pointer-events:none
+}
+#deathNotice small{font-size:11px;opacity:.72;letter-spacing:.16em}
 </style>
 </head>
 <body>
@@ -165,6 +173,7 @@ button{font:inherit}
   <div id="roundRule">FIRST TO 5</div>
 </div>
 <div id="damageOverlay"></div>
+<div id="deathNotice">ELIMINATED<br><small>WAIT FOR NEXT ROUND</small></div>
 
 
 <div id="healthBarWrap">
@@ -172,7 +181,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-08-31 ROUND-FX</div>
+<div id="buildBadge">BUILD 2026-09-01 NO-RESPAWN</div>
 
 
 <canvas id="game"></canvas>
@@ -408,7 +417,6 @@ function killEntity(victim,killer){
   if(team===0) scoreB++; else scoreR++;
   if(killer===player) player.kills++;
   if(victim===player) player.deaths++;
-  setTimeout(()=>spawnEntity(victim),900);
 
   checkRoundEnd();
 }
@@ -615,6 +623,7 @@ ui.startAI.addEventListener("click",startGame);
 ui.online.addEventListener("click",()=>notify("Render 서버 붙인 뒤 활성화 예정"));
 
 function updatePlayer(dt){
+  if(!player.alive) return;
   if(!player.alive) return;
   let f=0,s=0;
   if(TOUCH){
@@ -984,6 +993,8 @@ function renderWorld(){
   const hbValue=document.getElementById("healthBarValue");
   if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,player.hp))}%`;
   if(hbValue) hbValue.textContent=Math.max(0,Math.ceil(player.hp));
+  const dn=document.getElementById("deathNotice");
+  if(dn) dn.style.display=(!player.alive && !roundOver)?"block":"none";
   const wp=WEAPONS[player.weapon];
   ui.ammo.textContent=player.weapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`;
   ui.kd.textContent=`K/D ${player.kills} / ${player.deaths}`;
