@@ -87,7 +87,6 @@ button{font:inherit}
 #reloadButton{right:calc(126px + var(--safeR));bottom:calc(42px + var(--safeB));width:54px;height:45px}
 #aimButton{right:calc(16px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
 #espButton{right:calc(86px + var(--safeR));top:calc(77px + var(--safeT));width:64px;height:42px}
-#noRecoilButton{right:calc(16px + var(--safeR));top:calc(125px + var(--safeT));width:78px;height:42px}
 .touchButton.on{background:#70471d;border-color:#ffbd63}
 
 #notice{
@@ -182,14 +181,14 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-01 MAC-NORECOIL-FIX</div>
+<div id="buildBadge">BUILD 2026-09-01 LOBBY-RETURN</div>
 
 
 <canvas id="game"></canvas>
 
 <div id="menu">
   <h1>CHEAT ARENA</h1>
-  <p>5 VS 5 AI FPS · 6 WEAPONS</p>
+  <p>5 VS 5 AI FPS · 5 WEAPONS</p>
   <button id="startAI" class="menuButton primary">AI 5v5 시작</button>
   <button id="online" class="menuButton">온라인 라운드전 (준비 중)</button>
   <p id="serverText">GitHub Pages 클라이언트 · Render 서버 미연결</p>
@@ -201,7 +200,6 @@ button{font:inherit}
   <button class="weapon" data-w="2"><b>3</b>KNIFE</button>
   <button class="weapon" data-w="3"><b>4</b>SHOTGUN</button>
   <button class="weapon" data-w="4"><b>5</b>CROSSBOW</button>
-  <button class="weapon" data-w="5"><b>6</b>MAC</button>
 </div>
 
 <div id="topInfo" class="hidden">BLUE 0 : 0 RED</div>
@@ -215,7 +213,6 @@ button{font:inherit}
 <div id="cheatHud" class="hidden">
   <div id="aimState">F1 AIM OFF</div>
   <div id="espState">F2 ESP OFF</div>
-  <div id="recoilState">F3 NO RECOIL OFF</div>
 </div>
 
 <div id="crosshair" class="hidden"></div>
@@ -225,7 +222,6 @@ button{font:inherit}
   <button id="reloadButton" class="touchButton">R</button>
   <button id="aimButton" class="touchButton">AIM</button>
   <button id="espButton" class="touchButton">ESP</button>
-  <button id="noRecoilButton" class="touchButton">NO RCL</button>
 </div>
 
 <div id="notice"></div>
@@ -250,8 +246,8 @@ const ui = {
   menu:$("menu"), startAI:$("startAI"), online:$("online"),
   weaponBar:$("weaponBar"), topInfo:$("topInfo"), leftHud:$("leftHud"),
   cheatHud:$("cheatHud"), crosshair:$("crosshair"), touchUI:$("touchUI"),
-  hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"), recoilState:$("recoilState"),
-  reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"), noRecoil:$("noRecoilButton"),
+  hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"),
+  reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"),
   notice:$("notice")
 };
 
@@ -259,7 +255,7 @@ const coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matche
 const TOUCH = (navigator.maxTouchPoints || 0) > 0 && coarse;
 
 const TILE = 64;
-const FOV = 103*Math.PI/180;
+const FOV = Math.PI / 3;
 const TWO_PI = Math.PI * 2;
 
 const MAP = [
@@ -288,13 +284,12 @@ const WEAPONS = [
   {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065, type:"hitscan"},
   {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70, type:"melee"},
   {name:"SHOTGUN", damage:15, rate:1.05, mag:6, range:390, spread:.24, type:"shotgun", pellets:8},
-  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"},
-  {name:"MAC", damage:34, rate:9.2, mag:50, range:820, spread:.095, type:"hitscan"}
+  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"}
 ];
 
 const player = {
   x:2.5*TILE, y:2.5*TILE, a:0,
-  hp:100, team:0, weapon:0, ammo:[30,12,999,6,1,50],
+  hp:100, team:0, weapon:0, ammo:[30,12,999,6,1],
   nextShot:0, kills:0, deaths:0, alive:true
 };
 
@@ -319,7 +314,6 @@ const bots = [
 let running = false;
 let aimOn = false;
 let espOn = false;
-let noRecoil = false;
 let scoreB = 0;
 let scoreR = 0;
 let firing = false;
@@ -412,7 +406,7 @@ function spawnEntity(e){
   e.y=p[1]*TILE;
   e.hp=100;
   e.alive=true;
-  if(e===player) player.ammo=[30,12,999,6,1,50];
+  if(e===player) player.ammo=[30,12,999,6,1];
 }
 
 function killEntity(victim,killer){
@@ -461,7 +455,7 @@ function beginNextRound(){
   roundOver=false;
   player.hp=100; player.alive=true;
   player.x=3*TILE; player.y=3*TILE; player.a=0;
-  player.ammo=[30,12,999,6,1,50];
+  player.ammo=[30,12,999,6,1];
   player.nextShot=0;
 
   let bi=0, ri=0;
@@ -477,33 +471,30 @@ function beginNextRound(){
 function finishMatch(winnerTeam){
   roundOver=true;
   roundRestartAt=0;
-  const msg=winnerTeam===0?"BLUE TEAM WINS":"RED TEAM WINS";
-  notify(msg);
+  notify(winnerTeam===0?"BLUE TEAM WINS":"RED TEAM WINS");
   setTimeout(()=>{
-    running=false;
-    document.exitPointerLock?.();
-
-    // Reset match state for the next time PLAY is pressed.
-    blueRoundWins=0;
-    redRoundWins=0;
-    roundNumber=1;
-    roundOver=false;
-    roundRestartAt=0;
-    player.hp=100;
-    player.alive=true;
-    player.ammo=[30,12,999,6,1,50];
-    bolts.length=0;
-    impacts.length=0;
-    bloodFx.length=0;
-    damageFlash=0;
+    blueRoundWins=0; redRoundWins=0; roundNumber=1;
+    player.hp=100; player.alive=true; player.ammo=[30,12,999,6,1];
+    bolts.length=0; impacts.length=0; bloodFx.length=0; damageFlash=0;
+    running=false; roundOver=false;
     updateRoundHud();
 
-    // Return to the existing lobby/menu instead of starting round 1 again.
-    if(ui.menu) ui.menu.style.display="flex";
+    // Return to the existing lobby/start overlay.
+    const overlay=document.getElementById("overlay");
+    if(overlay) overlay.classList.remove("hidden");
+    const lobby=document.getElementById("lobby");
+    if(lobby){ lobby.style.display=""; lobby.classList.remove("hidden"); }
+    const menu=document.getElementById("menu");
+    if(menu){ menu.style.display=""; menu.classList.remove("hidden"); }
+    const startScreen=document.getElementById("startScreen");
+    if(startScreen){ startScreen.style.display=""; startScreen.classList.remove("hidden"); }
+
     const dn=document.getElementById("deathNotice");
     if(dn) dn.style.display="none";
     const dmg=document.getElementById("damageOverlay");
     if(dmg) dmg.style.opacity="0";
+
+    if(document.pointerLockElement) document.exitPointerLock?.();
   },1800);
 }
 
@@ -571,10 +562,6 @@ function fireBolt(shooter,w){
 }
 
 function shoot(shooter,wIndex){
-  if(shooter===player && player.weapon!==2 && player.ammo[wIndex]<=0){
-    reload();
-    return;
-  }
   if(!shooter.alive) return;
   const w=WEAPONS[wIndex];
   if(!w || gameTime < shooter.nextShot) return;
@@ -588,23 +575,14 @@ function shoot(shooter,wIndex){
 
   if(shooter===player){
     if(wIndex!==2) player.ammo[wIndex]--;
-  if(shooter===player && wIndex!==2 && player.ammo[wIndex]<=0){
-    setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reload(); },80);
-  }
 
-    if(wIndex===2 || noRecoil){
-      recoilPitch=0;
-      recoilKick=0;
-      recoilSide=0;
-    }else{
-      const recoilTable=[.018,.052,0,.095,.070,.145];
-      const kickTable=[.42,.75,0,1.25,.90,2.35];
-      const sideTable=[.010,.018,0,.032,.012,.085];
-      recoilPitch=Math.min(wIndex===5?.55:.24,recoilPitch+recoilTable[wIndex]);
-      recoilKick=Math.min(wIndex===5?2.8:1.35,recoilKick+kickTable[wIndex]);
-      recoilSide+=(Math.random()-.5)*sideTable[wIndex];
-      player.a+=recoilSide*(wIndex===5?1.8:1);
-    }
+    const recoilTable=[.018,.052,.025,.095,.070];
+    const kickTable=[.42,.75,.32,1.25,.90];
+    const sideTable=[.010,.018,.006,.032,.012];
+    recoilPitch=Math.min(.24,recoilPitch+recoilTable[wIndex]);
+    recoilKick=Math.min(1.35,recoilKick+kickTable[wIndex]);
+    recoilSide+=(Math.random()-.5)*sideTable[wIndex];
+    player.a+=recoilSide;
     muzzleFlash = wIndex===2 ? 0 : .075;
   }
 
@@ -645,12 +623,6 @@ function toggleAim(){
 function toggleEsp(){
   espOn=!espOn;
   ui.esp.classList.toggle("on",espOn);
-}
-function toggleNoRecoil(){
-  noRecoil=!noRecoil;
-  ui.noRecoil?.classList.toggle("on",noRecoil);
-  if(ui.recoilState) ui.recoilState.textContent=`F3 NO RECOIL ${noRecoil?"ON":"OFF"}`;
-  notify(noRecoil?"NO RECOIL ON":"NO RECOIL OFF");
 }
 
 function startGame(){
@@ -999,7 +971,7 @@ function renderWorld(){
     ctx.fillStyle="#2d3234";ctx.fillRect(w*.39,h*.79,w*.12,h*.055);
     ctx.fillStyle="#9a7047";ctx.fillRect(w*.405,h*.804,w*.045,h*.012);
     ctx.fillStyle="#33251c";ctx.beginPath();ctx.moveTo(w*.34,h*.855);ctx.lineTo(w*.43,h*.855);ctx.lineTo(w*.37,h*.95);ctx.lineTo(w*.31,h*.94);ctx.closePath();ctx.fill();
-  }else if(player.weapon===4){
+  }else{
     // Crossbow: stock, rail, limbs, string, loaded bolt, optic
     ctx.fillStyle="#33261e";ctx.fillRect(w*.405,h*.84,w*.255,h*.055);
     ctx.fillStyle="#5e676a";ctx.fillRect(w*.49,h*.772,w*.23,h*.025);
@@ -1010,25 +982,10 @@ function renderWorld(){
     ctx.fillStyle="#795333";ctx.beginPath();ctx.moveTo(w*.78,h*.758);ctx.lineTo(w*.805,h*.758);ctx.lineTo(w*.79,h*.748);ctx.closePath();ctx.fill();
     ctx.fillStyle="#171a1b";ctx.beginPath();ctx.moveTo(w*.47,h*.88);ctx.lineTo(w*.535,h*.88);ctx.lineTo(w*.515,h*.985);ctx.lineTo(w*.48,h*.97);ctx.closePath();ctx.fill();
     ctx.fillStyle="#241b17";ctx.fillRect(w*.405,h*.89,w*.09,h*.04);
-  }else{
-    // MAC: fictional belt-fed GPMG with M240-like silhouette.
-    ctx.fillStyle="#202426";ctx.fillRect(w*.34,h*.805,w*.34,h*.075);
-    ctx.fillStyle="#4f585b";ctx.fillRect(w*.47,h*.75,w*.34,h*.038);
-    ctx.fillStyle="#171a1c";ctx.fillRect(w*.79,h*.758,w*.105,h*.017);
-    ctx.fillStyle="#697174";ctx.fillRect(w*.455,h*.735,w*.18,h*.018);
-    for(let i=0;i<7;i++){ctx.fillStyle="#151819";ctx.fillRect(w*(.47+i*.023),h*.738,w*.010,h*.014);}
-    ctx.strokeStyle="#343a3c";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(w*.54,h*.74);ctx.quadraticCurveTo(w*.58,h*.69,w*.62,h*.74);ctx.stroke();
-    ctx.fillStyle="#353b3e";ctx.fillRect(w*.64,h*.774,w*.18,h*.028);
-    for(let i=0;i<5;i++){ctx.fillStyle="#151819";ctx.fillRect(w*(.66+i*.028),h*.779,w*.012,h*.017);}
-    ctx.fillStyle="#394044";ctx.fillRect(w*.45,h*.87,w*.11,h*.105);
-    ctx.fillStyle="#b18a45";for(let i=0;i<5;i++){ctx.fillRect(w*(.555+i*.012),h*(.842+i*.012),w*.010,h*.020);}
-    ctx.fillStyle="#171a1b";ctx.beginPath();ctx.moveTo(w*.39,h*.87);ctx.lineTo(w*.45,h*.87);ctx.lineTo(w*.43,h*.98);ctx.lineTo(w*.395,h*.965);ctx.closePath();ctx.fill();
-    ctx.fillStyle="#252a2c";ctx.beginPath();ctx.moveTo(w*.34,h*.83);ctx.lineTo(w*.42,h*.84);ctx.lineTo(w*.35,h*.94);ctx.lineTo(w*.29,h*.925);ctx.closePath();ctx.fill();
-    ctx.fillStyle="#111";ctx.fillRect(w*.765,h*.72,w*.014,h*.04);
   }
 
   if(muzzleFlash>0 && player.weapon!==2 && player.weapon!==4){
-    const mx=player.weapon===5?w*.90:(player.weapon===3?w*.82:w*.775);
+    const mx=player.weapon===3?w*.82:w*.775;
     const my=player.weapon===3?h*.765:h*.755;
     const f=9+Math.random()*14;
     ctx.fillStyle="rgba(255,226,125,.92)";
@@ -1160,11 +1117,10 @@ document.querySelectorAll(".weapon").forEach(b=>{
 
 addEventListener("keydown",e=>{
   keys[e.key.toLowerCase()]=true;
-  if(["1","2","3","4","5","6"].includes(e.key))selectWeapon(Number(e.key)-1);
+  if(["1","2","3","4","5"].includes(e.key))selectWeapon(Number(e.key)-1);
   if(e.key.toLowerCase()==="r")reload();
   if(e.key==="F1"){e.preventDefault();toggleAim();}
   if(e.key==="F2"){e.preventDefault();toggleEsp();}
-  if(e.key==="F3"){e.preventDefault();toggleNoRecoil();}
 });
 addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false});
 
@@ -1183,7 +1139,6 @@ if(!TOUCH){
 ui.reload.addEventListener("click",reload);
 ui.aim.addEventListener("click",toggleAim);
 ui.esp.addEventListener("click",toggleEsp);
-ui.noRecoil?.addEventListener("click",toggleNoRecoil);
 
 function loop(now){
   const dt=Math.min(.033,(now-last)/1000);
