@@ -170,7 +170,7 @@ button{font:inherit}
 </head>
 <body>
 
-<div id="roundHud">
+<div id="roundHud" class="hidden">
   <div id="roundTitle">ROUND 1</div>
   <div id="roundScore"><span id="blueRounds">0</span> : <span id="redRounds">0</span></div>
   <div id="roundRule">FIRST TO 5</div>
@@ -179,12 +179,12 @@ button{font:inherit}
 <div id="deathNotice">ELIMINATED<br><small>WAIT FOR NEXT ROUND</small></div>
 
 
-<div id="healthBarWrap">
+<div id="healthBarWrap" class="hidden">
   <div id="healthBarTop"><span>HEALTH</span><span id="healthBarValue">100</span></div>
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-03 MAC + NO RECOIL VISIBLE</div>
+<div id="buildBadge">BUILD 2026-09-04 MATCH-STATE ROOT FIX</div>
 
 
 <canvas id="game"></canvas>
@@ -252,6 +252,7 @@ const ui = {
   menu:$("menu"), startAI:$("startAI"), online:$("online"),
   weaponBar:$("weaponBar"), topInfo:$("topInfo"), leftHud:$("leftHud"),
   cheatHud:$("cheatHud"), crosshair:$("crosshair"), touchUI:$("touchUI"),
+  roundHud:$("roundHud"), healthBarWrap:$("healthBarWrap"),
   hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"), recoilState:$("recoilState"),
   reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"), noRecoil:$("noRecoilButton"),
   notice:$("notice")
@@ -343,7 +344,15 @@ let redRoundWins = 0;
 let roundNumber = 1;
 let roundOver = false;
 let roundRestartAt = 0;
+let matchEndAt = 0;
 const ROUNDS_TO_WIN = 5;
+const MATCH_STATE = Object.freeze({
+  LOBBY:"LOBBY",
+  PLAYING:"PLAYING",
+  ROUND_END:"ROUND_END",
+  MATCH_END:"MATCH_END"
+});
+let matchState = MATCH_STATE.LOBBY;
 
 let touchLookId = null;
 let touchLookX = 0;
@@ -459,60 +468,119 @@ function updateRoundHud(){
   if(rt) rt.textContent=`ROUND ${roundNumber}`;
 }
 
+function setMatchUi(inMatch){
+  // .hidden uses !important, so ALL screen changes go through classList.
+  ui.menu.classList.toggle("hidden",inMatch);
+  ui.weaponBar.classList.toggle("hidden",!inMatch);
+  ui.topInfo.classList.toggle("hidden",!inMatch);
+  ui.leftHud.classList.toggle("hidden",!inMatch);
+  ui.cheatHud.classList.toggle("hidden",!inMatch);
+  ui.crosshair.classList.toggle("hidden",!inMatch);
+  ui.roundHud.classList.toggle("hidden",!inMatch);
+  ui.healthBarWrap.classList.toggle("hidden",!inMatch);
+  if(TOUCH) ui.touchUI.classList.toggle("hidden",!inMatch);
+  else ui.touchUI.classList.add("hidden");
+}
+
+function resetMatchScore(){
+  blueRoundWins=0;
+  redRoundWins=0;
+  roundNumber=1;
+  roundRestartAt=0;
+  matchEndAt=0;
+  scoreB=0;
+  scoreR=0;
+  player.kills=0;
+  player.deaths=0;
+  updateRoundHud();
+}
+
+function enterLobby(){
+  running=false;
+  firing=false;
+  roundOver=true;
+  matchState=MATCH_STATE.LOBBY;
+  roundRestartAt=0;
+  matchEndAt=0;
+  document.exitPointerLock?.();
+
+  setMatchUi(false);
+
+  const dn=document.getElementById("deathNotice");
+  if(dn) dn.style.display="none";
+  const dmg=document.getElementById("damageOverlay");
+  if(dmg) dmg.style.opacity="0";
+
+  damageFlash=0;
+  recoilPitch=0;
+  recoilKick=0;
+  recoilSide=0;
+  bolts.length=0;
+  impacts.length=0;
+  bloodFx.length=0;
+
+  resetMatchScore();
+}
+
 function beginNextRound(){
+  running=true;
+  firing=false;
   roundOver=false;
-  player.hp=100; player.alive=true;
-  player.x=3*TILE; player.y=3*TILE; player.a=0;
+  matchState=MATCH_STATE.PLAYING;
+  roundRestartAt=0;
+  matchEndAt=0;
+
+  player.hp=100;
+  player.alive=true;
+  player.x=3*TILE;
+  player.y=3*TILE;
+  player.a=0;
   player.ammo=[30,12,999,6,1,50];
   player.nextShot=0;
 
-  let bi=0, ri=0;
+  let bi=0,ri=0;
   for(const b of bots){
-    const spawn=b.team===0 ? blueSpawn[bi++ % blueSpawn.length] : redSpawn[ri++ % redSpawn.length];
+    const spawn=b.team===0
+      ? blueSpawn[bi++ % blueSpawn.length]
+      : redSpawn[ri++ % redSpawn.length];
     resetEntityForRound(b,spawn);
   }
-  bolts.length=0; impacts.length=0; bloodFx.length=0;
+
+  bolts.length=0;
+  impacts.length=0;
+  bloodFx.length=0;
+  damageFlash=0;
+  recoilPitch=0;
+  recoilKick=0;
+  recoilSide=0;
+
   updateRoundHud();
   notify(`ROUND ${roundNumber}`);
 }
 
+function startMatch(){
+  resetMatchScore();
+  setMatchUi(true);
+  beginNextRound();
+  notify("AI 5v5 시작");
+}
+
 function finishMatch(winnerTeam){
+  if(matchState===MATCH_STATE.MATCH_END || matchState===MATCH_STATE.LOBBY) return;
   roundOver=true;
+  firing=false;
+  matchState=MATCH_STATE.MATCH_END;
   roundRestartAt=0;
-  const msg=winnerTeam===0?"BLUE TEAM WINS":"RED TEAM WINS";
-  notify(msg);
-  setTimeout(()=>{
-    running=false;
-    document.exitPointerLock?.();
-
-    // Reset match state for the next time PLAY is pressed.
-    blueRoundWins=0;
-    redRoundWins=0;
-    roundNumber=1;
-    roundOver=false;
-    roundRestartAt=0;
-    player.hp=100;
-    player.alive=true;
-    player.ammo=[30,12,999,6,1,50];
-    bolts.length=0;
-    impacts.length=0;
-    bloodFx.length=0;
-    damageFlash=0;
-    updateRoundHud();
-
-    // Return to the existing lobby/menu instead of starting round 1 again.
-    if(ui.menu) ui.menu.style.display="flex";
-    const dn=document.getElementById("deathNotice");
-    if(dn) dn.style.display="none";
-    const dmg=document.getElementById("damageOverlay");
-    if(dmg) dmg.style.opacity="0";
-  },1800);
+  matchEndAt=gameTime+1.8;
+  notify(winnerTeam===0 ? "BLUE TEAM WINS" : "RED TEAM WINS");
 }
 
 function finishRound(winnerTeam){
-  if(roundOver) return;
+  if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
+
   roundOver=true;
-  if(winnerTeam===0) blueRoundWins++; else redRoundWins++;
+  if(winnerTeam===0) blueRoundWins++;
+  else redRoundWins++;
   updateRoundHud();
 
   if(blueRoundWins>=ROUNDS_TO_WIN || redRoundWins>=ROUNDS_TO_WIN){
@@ -520,15 +588,18 @@ function finishRound(winnerTeam){
     return;
   }
 
+  matchState=MATCH_STATE.ROUND_END;
   notify(winnerTeam===0 ? "BLUE ROUND WIN" : "RED ROUND WIN");
   roundNumber++;
   roundRestartAt=gameTime+1.6;
 }
 
 function checkRoundEnd(){
-  if(roundOver) return;
+  if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
+
   const blueAlive=(player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
   const redAlive=bots.filter(b=>b.team===1&&b.alive).length;
+
   if(redAlive===0) finishRound(0);
   else if(blueAlive===0) finishRound(1);
 }
@@ -655,25 +726,10 @@ function toggleNoRecoil(){
   notify(noRecoil?"NO RECOIL ON":"NO RECOIL OFF");
 }
 
-function startGame(){
-  running=true;
-  ui.menu.classList.add("hidden");
-  ui.weaponBar.classList.remove("hidden");
-  ui.topInfo.classList.remove("hidden");
-  ui.leftHud.classList.remove("hidden");
-  ui.cheatHud.classList.remove("hidden");
-  ui.crosshair.classList.remove("hidden");
-  if(TOUCH) ui.touchUI.classList.remove("hidden");
-  player.kills=player.deaths=scoreB=scoreR=0;
-  spawnEntity(player);
-  bots.forEach(spawnEntity);
-  notify("AI 5v5 시작");
-}
-ui.startAI.addEventListener("click",startGame);
+ui.startAI.addEventListener("click",startMatch);
 ui.online.addEventListener("click",()=>notify("Render 서버 붙인 뒤 활성화 예정"));
 
 function updatePlayer(dt){
-  if(!player.alive) return;
   if(!player.alive) return;
   let f=0,s=0;
   if(TOUCH){
@@ -1192,11 +1248,13 @@ function loop(now){
   last=now;
   gameTime+=dt;
   if(running){
-    if(roundOver && roundRestartAt && gameTime>=roundRestartAt){
-      roundRestartAt=0;
+    if(matchState===MATCH_STATE.ROUND_END && roundRestartAt && gameTime>=roundRestartAt){
       beginNextRound();
+    }else if(matchState===MATCH_STATE.MATCH_END && matchEndAt && gameTime>=matchEndAt){
+      enterLobby();
     }
-    if(!roundOver){
+
+    if(matchState===MATCH_STATE.PLAYING){
       updatePlayer(dt);
       updateBots(dt);
       updateProjectiles(dt);
@@ -1207,7 +1265,7 @@ function loop(now){
   renderWorld();
   requestAnimationFrame(loop);
 }
-updateRoundHud();
+enterLobby();
 requestAnimationFrame(loop);
 </script>
 </body>
