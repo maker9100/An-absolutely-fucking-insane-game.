@@ -185,7 +185,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-05 RANDOM MAP + FIREBASE CLEANUP</div>
+<div id="buildBadge">BUILD 2026-09-05 MODELING OVERHAUL</div>
 
 
 <canvas id="game"></canvas>
@@ -987,192 +987,230 @@ function updateBots(dt){
 
 function drawSoldierModel(e,sx,baseY,sz){
   const enemy=e.team===1;
-  const main=enemy?"#7f4141":"#385f80";
-  const mainHi=enemy?"#a85b58":"#5487aa";
-  const dark=enemy?"#3c2022":"#203748";
-  const armor=enemy?"#62585b":"#586873";
-  const armorHi=enemy?"#817477":"#748792";
-  const patch=enemy?"#e07773":"#7dc5ee";
-  const skin="#b98d70";
+  const cloth=enemy?"#6f3e41":"#3d6280";
+  const clothHi=enemy?"#a35a5e":"#5a8ab0";
+  const clothLo=enemy?"#3b2123":"#213949";
+  const armor=enemy?"#5e5559":"#5b6972";
+  const armorHi=enemy?"#86777c":"#7d909d";
+  const webbing="#24282a";
+  const boot="#151718";
+  const gun="#252a2d";
+  const gunHi="#697276";
+  const skin="#bc9173";
+  const patch=enemy?"#e46f6c":"#82d0f1";
 
   ctx.save();
 
-  // ground shadow
-  ctx.fillStyle="rgba(0,0,0,.28)";
+  // soft ground shadow
+  ctx.fillStyle="rgba(0,0,0,.26)";
   ctx.beginPath();
-  ctx.ellipse(sx,baseY+sz*.015,sz*.27,sz*.055,0,0,TWO_PI);
+  ctx.ellipse(sx,baseY+sz*.02,sz*.30,sz*.065,0,0,TWO_PI);
   ctx.fill();
 
-  // legs: thigh, knee pad, shin, boots
-  for(const side of [-1,1]){
-    const lx=sx+side*sz*.105;
-    ctx.fillStyle=dark;
-    ctx.beginPath();
-    ctx.moveTo(lx-side*sz*.075,baseY-sz*.48);
-    ctx.lineTo(lx+side*sz*.065,baseY-sz*.48);
-    ctx.lineTo(lx+side*sz*.052,baseY-sz*.25);
-    ctx.lineTo(lx-side*sz*.06,baseY-sz*.25);
-    ctx.closePath();ctx.fill();
+  // slight bob so units feel less cardboard-like
+  const bob=Math.sin((e.x+e.y)*.03 + gameTime*6)*sz*.012;
 
-    ctx.fillStyle=armorHi;
-    ctx.fillRect(lx-sz*.055,baseY-sz*.29,sz*.11,sz*.085);
-
-    ctx.fillStyle=dark;
-    ctx.beginPath();
-    ctx.moveTo(lx-sz*.055,baseY-sz*.21);
-    ctx.lineTo(lx+sz*.055,baseY-sz*.21);
-    ctx.lineTo(lx+sz*.047,baseY-sz*.035);
-    ctx.lineTo(lx-sz*.047,baseY-sz*.035);
-    ctx.closePath();ctx.fill();
-
-    ctx.fillStyle="#151718";
-    ctx.fillRect(lx-sz*.075,baseY-sz*.07,sz*.15,sz*.075);
-    ctx.fillStyle="#303538";
-    ctx.fillRect(lx-sz*.06,baseY-sz*.067,sz*.12,sz*.018);
-  }
-
-  // waist / belt
-  ctx.fillStyle="#1b1e20";
-  ctx.fillRect(sx-sz*.205,baseY-sz*.52,sz*.41,sz*.075);
-  ctx.fillStyle="#8c826d";
-  ctx.fillRect(sx-sz*.035,baseY-sz*.505,sz*.07,sz*.04);
-
-  // torso silhouette
-  ctx.fillStyle=main;
+  // torso base
+  ctx.fillStyle=cloth;
   ctx.beginPath();
-  ctx.moveTo(sx-sz*.25,baseY-sz*.94);
-  ctx.lineTo(sx-sz*.14,baseY-sz*1.01);
-  ctx.lineTo(sx+sz*.14,baseY-sz*1.01);
-  ctx.lineTo(sx+sz*.25,baseY-sz*.94);
-  ctx.lineTo(sx+sz*.205,baseY-sz*.50);
-  ctx.lineTo(sx-sz*.205,baseY-sz*.50);
-  ctx.closePath();ctx.fill();
+  ctx.moveTo(sx-sz*.23,baseY-sz*.98+bob);
+  ctx.lineTo(sx-sz*.14,baseY-sz*1.05+bob);
+  ctx.lineTo(sx+sz*.14,baseY-sz*1.05+bob);
+  ctx.lineTo(sx+sz*.23,baseY-sz*.98+bob);
+  ctx.lineTo(sx+sz*.205,baseY-sz*.50+bob);
+  ctx.lineTo(sx-sz*.205,baseY-sz*.50+bob);
+  ctx.closePath();
+  ctx.fill();
 
-  // shoulder panels
-  ctx.fillStyle=mainHi;
-  ctx.fillRect(sx-sz*.27,baseY-sz*.93,sz*.10,sz*.14);
-  ctx.fillRect(sx+sz*.17,baseY-sz*.93,sz*.10,sz*.14);
+  // shoulders
+  ctx.fillStyle=clothHi;
+  ctx.fillRect(sx-sz*.275,baseY-sz*.95+bob,sz*.11,sz*.15);
+  ctx.fillRect(sx+sz*.165,baseY-sz*.95+bob,sz*.11,sz*.15);
 
   // plate carrier
   ctx.fillStyle=armor;
   ctx.beginPath();
-  ctx.moveTo(sx-sz*.15,baseY-sz*.92);
-  ctx.lineTo(sx+sz*.15,baseY-sz*.92);
-  ctx.lineTo(sx+sz*.175,baseY-sz*.57);
-  ctx.lineTo(sx-sz*.175,baseY-sz*.57);
-  ctx.closePath();ctx.fill();
+  ctx.moveTo(sx-sz*.155,baseY-sz*.95+bob);
+  ctx.lineTo(sx+sz*.155,baseY-sz*.95+bob);
+  ctx.lineTo(sx+sz*.18,baseY-sz*.56+bob);
+  ctx.lineTo(sx-sz*.18,baseY-sz*.56+bob);
+  ctx.closePath();
+  ctx.fill();
 
-  // plate highlight + MOLLE straps
   ctx.fillStyle=armorHi;
-  ctx.fillRect(sx-sz*.12,baseY-sz*.87,sz*.24,sz*.16);
-  ctx.fillStyle="rgba(20,24,26,.55)";
-  for(let yy=0;yy<3;yy++){
-    ctx.fillRect(sx-sz*.13,baseY-sz*(.68-yy*.055),sz*.26,sz*.018);
+  ctx.fillRect(sx-sz*.118,baseY-sz*.90+bob,sz*.236,sz*.15);
+
+  // chest webbing + pouches
+  ctx.fillStyle="rgba(25,28,30,.52)";
+  for(let i=0;i<4;i++){
+    ctx.fillRect(sx-sz*.12,baseY-sz*(.69-i*.053)+bob,sz*.24,sz*.017);
   }
-  ctx.fillStyle="#24282a";
-  ctx.fillRect(sx-sz*.145,baseY-sz*.62,sz*.09,sz*.09);
-  ctx.fillRect(sx+sz*.055,baseY-sz*.62,sz*.09,sz*.09);
+  ctx.fillStyle=webbing;
+  ctx.fillRect(sx-sz*.145,baseY-sz*.65+bob,sz*.088,sz*.10);
+  ctx.fillRect(sx-sz*.047,baseY-sz*.65+bob,sz*.094,sz*.11);
+  ctx.fillRect(sx+sz*.06,baseY-sz*.65+bob,sz*.088,sz*.10);
 
-  // arms, angled toward weapon
-  ctx.save();
-  ctx.translate(sx-sz*.225,baseY-sz*.83);
-  ctx.rotate(-.16);
-  ctx.fillStyle=main;ctx.fillRect(-sz*.055,0,sz*.11,sz*.33);
-  ctx.fillStyle=dark;ctx.fillRect(-sz*.055,sz*.22,sz*.11,sz*.11);
-  ctx.restore();
+  // belt
+  ctx.fillStyle="#1b1f21";
+  ctx.fillRect(sx-sz*.205,baseY-sz*.53+bob,sz*.41,sz*.075);
+  ctx.fillStyle="#91866f";
+  ctx.fillRect(sx-sz*.032,baseY-sz*.515+bob,sz*.064,sz*.04);
 
-  ctx.save();
-  ctx.translate(sx+sz*.225,baseY-sz*.83);
-  ctx.rotate(.26);
-  ctx.fillStyle=main;ctx.fillRect(-sz*.055,0,sz*.11,sz*.31);
-  ctx.fillStyle=dark;ctx.fillRect(-sz*.055,sz*.20,sz*.11,sz*.11);
-  ctx.restore();
-
-  // hands
-  ctx.fillStyle=skin;
-  ctx.fillRect(sx-sz*.115,baseY-sz*.59,sz*.07,sz*.065);
-  ctx.fillRect(sx+sz*.12,baseY-sz*.59,sz*.07,sz*.065);
-
-  // rifle: stock, receiver, magazine, handguard, barrel, sights
+  // drop pouches
   ctx.fillStyle="#202426";
-  ctx.beginPath();
-  ctx.moveTo(sx-sz*.30,baseY-sz*.64);
-  ctx.lineTo(sx-sz*.205,baseY-sz*.67);
-  ctx.lineTo(sx-sz*.16,baseY-sz*.58);
-  ctx.lineTo(sx-sz*.29,baseY-sz*.57);
-  ctx.closePath();ctx.fill();
+  ctx.fillRect(sx-sz*.19,baseY-sz*.49+bob,sz*.065,sz*.085);
+  ctx.fillRect(sx+sz*.125,baseY-sz*.49+bob,sz*.065,sz*.085);
 
-  ctx.fillStyle="#3f474a";
-  ctx.fillRect(sx-sz*.18,baseY-sz*.675,sz*.31,sz*.095);
-  ctx.fillStyle="#676f72";
-  ctx.fillRect(sx+sz*.11,baseY-sz*.65,sz*.25,sz*.045);
+  // arms
+  ctx.save();
+  ctx.translate(sx-sz*.215,baseY-sz*.84+bob);
+  ctx.rotate(-.22);
+  ctx.fillStyle=cloth;
+  ctx.fillRect(-sz*.052,0,sz*.104,sz*.20);
+  ctx.fillStyle=clothLo;
+  ctx.fillRect(-sz*.05,sz*.19,sz*.10,sz*.165);
+  ctx.fillStyle="#2e3436";
+  ctx.fillRect(-sz*.053,sz*.18,sz*.106,sz*.03);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(sx+sz*.215,baseY-sz*.84+bob);
+  ctx.rotate(.33);
+  ctx.fillStyle=cloth;
+  ctx.fillRect(-sz*.052,0,sz*.104,sz*.19);
+  ctx.fillStyle=clothLo;
+  ctx.fillRect(-sz*.05,sz*.18,sz*.10,sz*.155);
+  ctx.fillStyle="#2e3436";
+  ctx.fillRect(-sz*.053,sz*.17,sz*.106,sz*.03);
+  ctx.restore();
+
+  // gloves
+  ctx.fillStyle=skin;
+  ctx.fillRect(sx-sz*.125,baseY-sz*.575+bob,sz*.07,sz*.06);
+  ctx.fillRect(sx+sz*.125,baseY-sz*.575+bob,sz*.07,sz*.06);
+
+  // rifle in hands
+  ctx.fillStyle=gun;
+  ctx.beginPath();
+  ctx.moveTo(sx-sz*.30,baseY-sz*.64+bob);
+  ctx.lineTo(sx-sz*.20,baseY-sz*.68+bob);
+  ctx.lineTo(sx-sz*.155,baseY-sz*.595+bob);
+  ctx.lineTo(sx-sz*.29,baseY-sz*.57+bob);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle="#394043";
+  ctx.fillRect(sx-sz*.165,baseY-sz*.685+bob,sz*.315,sz*.10);
+  ctx.fillStyle=gunHi;
+  ctx.fillRect(sx+sz*.125,baseY-sz*.66+bob,sz*.255,sz*.047);
   ctx.fillStyle="#141719";
-  ctx.fillRect(sx+sz*.355,baseY-sz*.64,sz*.12,sz*.018);
+  ctx.fillRect(sx+sz*.372,baseY-sz*.648+bob,sz*.11,sz*.02);
 
   ctx.fillStyle="#181b1d";
   ctx.beginPath();
-  ctx.moveTo(sx-sz*.04,baseY-sz*.58);
-  ctx.lineTo(sx+sz*.055,baseY-sz*.58);
-  ctx.lineTo(sx+sz*.025,baseY-sz*.43);
-  ctx.lineTo(sx-sz*.055,baseY-sz*.45);
-  ctx.closePath();ctx.fill();
-
-  ctx.fillStyle="#111";
-  ctx.fillRect(sx+sz*.20,baseY-sz*.71,sz*.018,sz*.07);
-  ctx.fillRect(sx-sz*.08,baseY-sz*.73,sz*.018,sz*.065);
-
-  // neck
-  ctx.fillStyle=skin;
-  ctx.fillRect(sx-sz*.07,baseY-sz*1.10,sz*.14,sz*.13);
-
-  // head
-  ctx.fillStyle=skin;
-  ctx.beginPath();
-  ctx.ellipse(sx,baseY-sz*1.18,sz*.145,sz*.17,0,0,TWO_PI);
+  ctx.moveTo(sx-sz*.04,baseY-sz*.585+bob);
+  ctx.lineTo(sx+sz*.06,baseY-sz*.585+bob);
+  ctx.lineTo(sx+sz*.03,baseY-sz*.43+bob);
+  ctx.lineTo(sx-sz*.055,baseY-sz*.452+bob);
+  ctx.closePath();
   ctx.fill();
 
-  // helmet shell
-  ctx.fillStyle=dark;
+  ctx.fillStyle="#111";
+  ctx.fillRect(sx-sz*.085,baseY-sz*.73+bob,sz*.02,sz*.07);
+  ctx.fillRect(sx+sz*.205,baseY-sz*.715+bob,sz*.018,sz*.07);
+  ctx.fillStyle="#596063";
+  for(let i=0;i<4;i++){
+    ctx.fillRect(sx+sz*(.15+i*.045),baseY-sz*.645+bob,sz*.02,sz*.01);
+  }
+
+  // legs
+  for(const side of [-1,1]){
+    const lx=sx+side*sz*.104;
+    ctx.fillStyle=clothLo;
+    ctx.beginPath();
+    ctx.moveTo(lx-side*sz*.075,baseY-sz*.47+bob);
+    ctx.lineTo(lx+side*sz*.065,baseY-sz*.47+bob);
+    ctx.lineTo(lx+side*sz*.055,baseY-sz*.25+bob);
+    ctx.lineTo(lx-side*sz*.06,baseY-sz*.25+bob);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle=armorHi;
+    ctx.fillRect(lx-sz*.057,baseY-sz*.30+bob,sz*.114,sz*.085);
+
+    ctx.fillStyle=clothLo;
+    ctx.beginPath();
+    ctx.moveTo(lx-sz*.056,baseY-sz*.21+bob);
+    ctx.lineTo(lx+sz*.056,baseY-sz*.21+bob);
+    ctx.lineTo(lx+sz*.05,baseY-sz*.03+bob);
+    ctx.lineTo(lx-sz*.05,baseY-sz*.03+bob);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle=boot;
+    ctx.fillRect(lx-sz*.078,baseY-sz*.07+bob,sz*.156,sz*.076);
+    ctx.fillStyle="#32373a";
+    ctx.fillRect(lx-sz*.06,baseY-sz*.066+bob,sz*.12,sz*.018);
+  }
+
+  // neck / head
+  ctx.fillStyle=skin;
+  ctx.fillRect(sx-sz*.07,baseY-sz*1.115+bob,sz*.14,sz*.12);
+
+  ctx.fillStyle=skin;
   ctx.beginPath();
-  ctx.arc(sx,baseY-sz*1.22,sz*.18,Math.PI,0);
-  ctx.lineTo(sx+sz*.18,baseY-sz*1.17);
-  ctx.lineTo(sx-sz*.18,baseY-sz*1.17);
-  ctx.closePath();ctx.fill();
+  ctx.ellipse(sx,baseY-sz*1.185+bob,sz*.148,sz*.172,0,0,TWO_PI);
+  ctx.fill();
 
-  // helmet rim and side pads
-  ctx.fillStyle=mainHi;
-  ctx.fillRect(sx-sz*.18,baseY-sz*1.19,sz*.36,sz*.045);
+  // helmet
+  ctx.fillStyle=clothLo;
+  ctx.beginPath();
+  ctx.arc(sx,baseY-sz*1.225+bob,sz*.188,Math.PI,0);
+  ctx.lineTo(sx+sz*.18,baseY-sz*1.175+bob);
+  ctx.lineTo(sx-sz*.18,baseY-sz*1.175+bob);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle=clothHi;
+  ctx.fillRect(sx-sz*.182,baseY-sz*1.19+bob,sz*.364,sz*.048);
+
+  // ear protection / side plates
   ctx.fillStyle="#202426";
-  ctx.fillRect(sx-sz*.19,baseY-sz*1.18,sz*.055,sz*.10);
-  ctx.fillRect(sx+sz*.135,baseY-sz*1.18,sz*.055,sz*.10);
+  ctx.fillRect(sx-sz*.195,baseY-sz*1.18+bob,sz*.06,sz*.11);
+  ctx.fillRect(sx+sz*.135,baseY-sz*1.18+bob,sz*.06,sz*.11);
 
-  // visor/goggles
-  ctx.fillStyle="#101719";
-  ctx.fillRect(sx-sz*.125,baseY-sz*1.17,sz*.25,sz*.05);
-  ctx.fillStyle="rgba(150,190,200,.35)";
-  ctx.fillRect(sx-sz*.11,baseY-sz*1.16,sz*.095,sz*.022);
-  ctx.fillRect(sx+sz*.015,baseY-sz*1.16,sz*.095,sz*.022);
+  // visor
+  ctx.fillStyle="#0f1517";
+  ctx.fillRect(sx-sz*.127,baseY-sz*1.171+bob,sz*.254,sz*.052);
+  ctx.fillStyle="rgba(120,185,205,.34)";
+  ctx.fillRect(sx-sz*.112,baseY-sz*1.163+bob,sz*.095,sz*.02);
+  ctx.fillRect(sx+sz*.017,baseY-sz*1.163+bob,sz*.095,sz*.02);
 
-  // mask / chin strap
+  // chin strap / comms mic
   ctx.strokeStyle="#303639";
   ctx.lineWidth=Math.max(1,sz*.012);
   ctx.beginPath();
-  ctx.moveTo(sx-sz*.13,baseY-sz*1.12);
-  ctx.lineTo(sx,baseY-sz*1.04);
-  ctx.lineTo(sx+sz*.13,baseY-sz*1.12);
+  ctx.moveTo(sx-sz*.13,baseY-sz*1.12+bob);
+  ctx.lineTo(sx,baseY-sz*1.04+bob);
+  ctx.lineTo(sx+sz*.13,baseY-sz*1.12+bob);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(sx+sz*.15,baseY-sz*1.115+bob);
+  ctx.lineTo(sx+sz*.205,baseY-sz*1.08+bob);
   ctx.stroke();
 
   // team patch
   ctx.fillStyle=patch;
-  ctx.fillRect(sx-sz*.285,baseY-sz*.85,sz*.055,sz*.075);
+  ctx.fillRect(sx-sz*.288,baseY-sz*.86+bob,sz*.056,sz*.078);
 
-  // subtle outline
-  ctx.strokeStyle="rgba(0,0,0,.45)";
-  ctx.lineWidth=Math.max(1,sz*.009);
-  ctx.strokeRect(sx-sz*.18,baseY-sz*.92,sz*.36,sz*.41);
+  // outline
+  ctx.strokeStyle="rgba(0,0,0,.43)";
+  ctx.lineWidth=Math.max(1,sz*.01);
+  ctx.strokeRect(sx-sz*.18,baseY-sz*.95+bob,sz*.36,sz*.41);
 
   ctx.restore();
 }
+
 
 function renderWorld(){
   const w=innerWidth,h=innerHeight;
@@ -1303,7 +1341,7 @@ function renderWorld(){
     }
   }
 
-  // first-person weapon view models: barrel converges toward the crosshair
+  // first-person weapon view models: detailed shapes that still converge on the crosshair
   const kickY = recoilKick*34;
   const kickX = recoilSide*w*1.7;
   const cx=w/2, cy=h/2;
@@ -1316,201 +1354,146 @@ function renderWorld(){
     ctx.moveTo(pts[0][0],pts[0][1]);
     for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
     ctx.closePath();
-    ctx.fillStyle=fill;ctx.fill();
-    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();}
+    ctx.fillStyle=fill; ctx.fill();
+    if(stroke){
+      ctx.strokeStyle=stroke;
+      ctx.lineWidth=1.4;
+      ctx.stroke();
+    }
   };
-  const line=(x1,y1,x2,y2,width,color)=>{
-    ctx.strokeStyle=color;ctx.lineWidth=width;
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  const seg=(x1,y1,x2,y2,width,color)=>{
+    ctx.strokeStyle=color;
+    ctx.lineWidth=width;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
   };
 
-  let muzzleX=cx+w*.025, muzzleY=cy+h*.115;
+  let muzzleX=cx+w*.02, muzzleY=cy+h*.11;
+
+  // common off-hand / forearm
+  const drawForearm=(x,y,rx,ry,rot)=>{
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(rot);
+    ctx.fillStyle="#4a453f";
+    ctx.beginPath();
+    ctx.ellipse(0,0,rx,ry,0,0,TWO_PI);
+    ctx.fill();
+    ctx.fillStyle="#2b2a28";
+    ctx.fillRect(-rx*.7,-ry*.8,rx*1.4,ry*.35);
+    ctx.restore();
+  };
 
   if(player.weapon===0){
-    // AR - shouldered, viewed from behind/right.
-    muzzleX=cx+w*.018; muzzleY=cy+h*.105;
+    // AR
+    muzzleX=cx+w*.018; muzzleY=cy+h*.102;
 
-    // barrel and handguard narrow toward crosshair
-    poly([
-      [cx+w*.010,cy+h*.110],[cx+w*.032,cy+h*.110],
-      [w*.655,h*.805],[w*.600,h*.820]
-    ],"#4b5458","#1a1e20");
-    poly([
-      [w*.590,h*.785],[w*.660,h*.770],
-      [w*.735,h*.875],[w*.620,h*.900]
-    ],"#32383b","#151819");
+    poly([[muzzleX-w*.010,muzzleY-h*.010],[muzzleX+w*.011,muzzleY+h*.002],[w*.645,h*.792],[w*.590,h*.815]],"#727c80","#15191b");
+    poly([[w*.588,h*.770],[w*.668,h*.758],[w*.720,h*.815],[w*.612,h*.828]],"#3d4448","#161a1c");
+    poly([[w*.580,h*.744],[w*.637,h*.738],[w*.658,h*.776],[w*.592,h*.783]],"#626b6f");
+    for(let i=0;i<6;i++) seg(w*(.590+i*.010),h*.747,w*(.600+i*.010),h*.771,2,"#181c1e");
 
-    // upper receiver / top rail
-    poly([
-      [w*.575,h*.755],[w*.650,h*.748],
-      [w*.690,h*.805],[w*.600,h*.815]
-    ],"#5d666a");
-    for(let i=0;i<6;i++){
-      line(w*(.585+i*.012),h*.758,w*(.595+i*.012),h*.775,2,"#181b1d");
-    }
+    poly([[w*.592,h*.713],[w*.629,h*.711],[w*.643,h*.748],[w*.598,h*.751]],"#121719");
+    ctx.fillStyle="rgba(110,190,210,.5)";
+    ctx.fillRect(w*.604,h*.719,w*.022,h*.014);
 
-    // optic aligned with centerline
-    poly([
-      [w*.585,h*.720],[w*.620,h*.718],
-      [w*.635,h*.758],[w*.592,h*.760]
-    ],"#161a1c");
-    ctx.fillStyle="rgba(100,185,205,.48)";
-    ctx.fillRect(w*.596,h*.726,w*.023,h*.018);
+    poly([[w*.605,h*.808],[w*.690,h*.800],[w*.770,h*.922],[w*.635,h*.944]],"#24292c","#131618");
+    poly([[w*.620,h*.854],[w*.664,h*.848],[w*.692,h*.974],[w*.642,h*.983]],"#1d2224");
+    poly([[w*.698,h*.835],[w*.734,h*.847],[w*.752,h*.944],[w*.714,h*.939]],"#171b1d");
+    poly([[w*.764,h*.876],[w*.858,h*.944],[w*.905,h*.995],[w*.802,h*.953]],"#2b3134");
 
-    // magazine and pistol grip
-    poly([[w*.620,h*.858],[w*.665,h*.852],[w*.690,h*.972],[w*.640,h*.980]],"#202527");
-    poly([[w*.700,h*.840],[w*.735,h*.855],[w*.750,h*.950],[w*.713,h*.940]],"#191d1f");
-
-    // stock disappearing toward lower-right
-    poly([[w*.690,h*.820],[w*.770,h*.855],[w*.845,h*.960],[w*.760,h*.930]],"#292f31");
-
-    // front sight + muzzle
-    line(muzzleX, muzzleY+h*.020, muzzleX, muzzleY-h*.018, 3, "#111");
-    line(muzzleX-w*.008,muzzleY,muzzleX+w*.008,muzzleY,2,"#111");
-
-    // support hand
-    ctx.fillStyle="#393632";
-    ctx.beginPath();ctx.ellipse(w*.615,h*.855,w*.035,h*.040,-.35,0,TWO_PI);ctx.fill();
+    seg(muzzleX,muzzleY+h*.018,muzzleX,muzzleY-h*.014,3,"#111");
+    seg(muzzleX-w*.007,muzzleY,muzzleX+w*.007,muzzleY,2,"#111");
+    drawForearm(w*.638,h*.868,w*.034,h*.041,-.35);
+    drawForearm(w*.744,h*.935,w*.045,h*.055,-.18);
 
   }else if(player.weapon===1){
-    // Pistol - slide points into the crosshair, grip sits low-right.
-    muzzleX=cx+w*.012; muzzleY=cy+h*.090;
+    // Pistol
+    muzzleX=cx+w*.010; muzzleY=cy+h*.088;
 
-    poly([
-      [muzzleX-w*.010,muzzleY-h*.010],[muzzleX+w*.010,muzzleY+h*.002],
-      [w*.630,h*.790],[w*.570,h*.805]
-    ],"#646d71","#202426");
-    poly([
-      [w*.570,h*.805],[w*.630,h*.790],
-      [w*.660,h*.842],[w*.585,h*.858]
-    ],"#33393c");
+    poly([[muzzleX-w*.010,muzzleY-h*.008],[muzzleX+w*.010,muzzleY+h*.002],[w*.624,h*.787],[w*.568,h*.804]],"#697276","#202426");
+    poly([[w*.568,h*.804],[w*.624,h*.787],[w*.654,h*.837],[w*.582,h*.853]],"#363d40");
+    poly([[w*.590,h*.797],[w*.614,h*.794],[w*.619,h*.813],[w*.595,h*.817]],"#121719");
+    for(let i=0;i<4;i++) seg(w*(.575+i*.008),h*.792,w*(.578+i*.008),h*.827,2,"#383f42");
 
-    // ejection port
-    poly([[w*.592,h*.801],[w*.615,h*.797],[w*.620,h*.815],[w*.596,h*.820]],"#141719");
+    poly([[w*.604,h*.844],[w*.654,h*.838],[w*.678,h*.968],[w*.625,h*.985]],"#1f2426");
+    ctx.strokeStyle="#15191a"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.ellipse(w*.620,h*.860,w*.022,h*.030,-.15,0,TWO_PI); ctx.stroke();
 
-    // grip / trigger guard
-    poly([[w*.605,h*.846],[w*.655,h*.840],[w*.675,h*.965],[w*.625,h*.980]],"#202426");
-    ctx.strokeStyle="#16191a";ctx.lineWidth=3;
-    ctx.beginPath();ctx.ellipse(w*.620,h*.860,w*.022,h*.030,-.15,0,TWO_PI);ctx.stroke();
+    seg(muzzleX,muzzleY+h*.017,muzzleX,muzzleY-h*.010,3,"#111");
+    seg(w*.585,h*.788,w*.585,h*.768,3,"#111");
 
-    // sights
-    line(muzzleX,muzzleY+h*.018,muzzleX,muzzleY-h*.010,3,"#111");
-    line(w*.585,h*.788,w*.585,h*.768,3,"#111");
-
-    // hand
-    ctx.fillStyle="#3f3a35";
-    ctx.beginPath();ctx.ellipse(w*.637,h*.945,w*.040,h*.050,-.18,0,TWO_PI);ctx.fill();
+    drawForearm(w*.640,h*.946,w*.041,h*.051,-.18);
 
   }else if(player.weapon===2){
-    // Knife - no recoil, thrust/slash orientation toward the center.
-    const tipX=cx+w*.015, tipY=cy+h*.030;
-    poly([
-      [tipX,tipY],
-      [w*.610,h*.775],
-      [w*.575,h*.810]
-    ],"#cfd4d6","#747c7f");
-    line(tipX,tipY,w*.594,h*.792,2,"rgba(255,255,255,.75)");
+    // Knife
+    const tipX=cx+w*.012, tipY=cy+h*.028;
 
-    poly([[w*.565,h*.805],[w*.625,h*.780],[w*.640,h*.812],[w*.578,h*.838]],"#555d60");
-    poly([[w*.600,h*.825],[w*.655,h*.840],[w*.700,h*.960],[w*.645,h*.970]],"#181b1d");
-    for(let i=0;i<5;i++){
-      line(w*(.618+i*.009),h*(.844+i*.020),w*(.650+i*.008),h*(.850+i*.020),2,"#565b5d");
-    }
-
-    ctx.fillStyle="#3d3934";
-    ctx.beginPath();ctx.ellipse(w*.655,h*.930,w*.040,h*.050,-.25,0,TWO_PI);ctx.fill();
+    poly([[tipX,tipY],[w*.612,h*.774],[w*.573,h*.812]],"#d1d6d8","#7a8285");
+    seg(tipX,tipY,w*.598,h*.792,2,"rgba(255,255,255,.7)");
+    poly([[w*.565,h*.805],[w*.626,h*.780],[w*.642,h*.813],[w*.579,h*.839]],"#596164");
+    poly([[w*.601,h*.824],[w*.658,h*.841],[w*.705,h*.966],[w*.647,h*.975]],"#171a1b");
+    for(let i=0;i<5;i++) seg(w*(.618+i*.009),h*(.844+i*.020),w*(.649+i*.008),h*(.851+i*.020),2,"#585d5f");
+    drawForearm(w*.657,h*.931,w*.042,h*.052,-.24);
 
   }else if(player.weapon===3){
-    // Pump shotgun - long barrel narrows toward crosshair.
-    muzzleX=cx+w*.020; muzzleY=cy+h*.095;
+    // Shotgun
+    muzzleX=cx+w*.020; muzzleY=cy+h*.093;
 
-    poly([
-      [muzzleX-w*.012,muzzleY-h*.006],[muzzleX+w*.012,muzzleY+h*.008],
-      [w*.700,h*.800],[w*.635,h*.825]
-    ],"#51595d","#151819");
-    // magazine tube
-    poly([
-      [muzzleX+w*.006,muzzleY+h*.026],[muzzleX+w*.020,muzzleY+h*.034],
-      [w*.690,h*.825],[w*.650,h*.842]
-    ],"#343a3d");
+    poly([[muzzleX-w*.011,muzzleY-h*.007],[muzzleX+w*.012,muzzleY+h*.008],[w*.705,h*.794],[w*.633,h*.824]],"#71797d","#161a1c");
+    poly([[muzzleX+w*.004,muzzleY+h*.026],[muzzleX+w*.017,muzzleY+h*.034],[w*.692,h*.821],[w*.648,h*.841]],"#33393c");
+    poly([[w*.620,h*.805],[w*.714,h*.782],[w*.778,h*.875],[w*.650,h*.907]],"#272d30","#111416");
 
-    // receiver
-    poly([[w*.625,h*.810],[w*.710,h*.785],[w*.770,h*.875],[w*.650,h*.905]],"#252a2d");
+    poly([[w*.590,h*.804],[w*.648,h*.798],[w*.694,h*.867],[w*.614,h*.889]],"#76523b");
+    for(let i=0;i<5;i++) seg(w*(.602+i*.011),h*.815,w*(.629+i*.011),h*.866,2,"#3a281f");
+    poly([[w*.705,h*.850],[w*.778,h*.876],[w*.870,h*.980],[w*.790,h*.950]],"#402e23");
 
-    // wooden pump
-    poly([[w*.590,h*.805],[w*.645,h*.800],[w*.690,h*.865],[w*.615,h*.885]],"#735039");
-    for(let i=0;i<5;i++){
-      line(w*(.602+i*.011),h*.816,w*(.630+i*.011),h*.865,2,"#39281f");
-    }
+    ctx.fillStyle="#b43b2f";
+    ctx.fillRect(w*.628,h*.827,w*.014,h*.014);
+    ctx.fillRect(w*.646,h*.824,w*.014,h*.014);
+    seg(muzzleX,muzzleY+h*.019,muzzleX,muzzleY-h*.012,3,"#111");
 
-    // stock
-    poly([[w*.705,h*.850],[w*.775,h*.875],[w*.865,h*.975],[w*.785,h*.950]],"#3a2a20");
-
-    // front sight
-    line(muzzleX,muzzleY+h*.020,muzzleX,muzzleY-h*.012,3,"#111");
-
-    ctx.fillStyle="#3d3934";
-    ctx.beginPath();ctx.ellipse(w*.640,h*.885,w*.040,h*.045,-.30,0,TWO_PI);ctx.fill();
+    drawForearm(w*.636,h*.884,w*.042,h*.046,-.28);
 
   }else if(player.weapon===4){
-    // Crossbow - bolt rail aimed directly at the crosshair.
-    const tipX=cx+w*.010, tipY=cy+h*.065;
+    // Crossbow
+    const tipX=cx+w*.010, tipY=cy+h*.060;
 
-    poly([[tipX,tipY],[w*.670,h*.800],[w*.625,h*.820]],"#626b6e");
-    line(tipX,tipY,w*.680,h*.806,2,"#d8d2b7");
+    poly([[tipX,tipY],[w*.669,h*.798],[w*.623,h*.820]],"#606a6d");
+    seg(tipX,tipY,w*.680,h*.806,2,"#d9d0b8");
 
-    // limbs + string in perspective
-    ctx.strokeStyle="#8c9699";ctx.lineWidth=5;
+    ctx.strokeStyle="#8b9598"; ctx.lineWidth=5;
     ctx.beginPath();
-    ctx.moveTo(w*.545,h*.785);
-    ctx.quadraticCurveTo(w*.640,h*.720,w*.735,h*.790);
+    ctx.moveTo(w*.543,h*.785);
+    ctx.quadraticCurveTo(w*.640,h*.716,w*.738,h*.792);
     ctx.stroke();
-    line(w*.545,h*.785,w*.735,h*.790,1.5,"#d2d1c7");
+    seg(w*.543,h*.785,w*.738,h*.792,1.5,"#d2d1c7");
 
-    // body / stock
-    poly([[w*.610,h*.795],[w*.690,h*.785],[w*.780,h*.900],[w*.675,h*.920]],"#33261e");
-    poly([[w*.650,h*.748],[w*.690,h*.748],[w*.710,h*.790],[w*.660,h*.792]],"#191d1f");
-    ctx.fillStyle="rgba(90,170,185,.50)";
-    ctx.fillRect(w*.662,h*.755,w*.030,h*.015);
+    poly([[w*.610,h*.795],[w*.691,h*.785],[w*.782,h*.900],[w*.676,h*.923]],"#33261e");
+    poly([[w*.650,h*.747],[w*.692,h*.747],[w*.711,h*.790],[w*.660,h*.792]],"#161a1c");
+    ctx.fillStyle="rgba(90,170,185,.52)";
+    ctx.fillRect(w*.663,h*.754,w*.030,h*.015);
+    poly([[w*.675,h*.794],[w*.696,h*.782],[w*.690,h*.809]],"#8a4336");
 
-    // bolt fletching
-    poly([[w*.675,h*.795],[w*.695,h*.782],[w*.690,h*.808]],"#8a4336");
-
-    // hand
-    ctx.fillStyle="#3d3934";
-    ctx.beginPath();ctx.ellipse(w*.680,h*.915,w*.040,h*.050,-.28,0,TWO_PI);ctx.fill();
+    drawForearm(w*.678,h*.915,w*.041,h*.050,-.28);
 
   }else{
-    // MAC - bulky belt-fed GPMG, but still shouldered toward the crosshair.
-    muzzleX=cx+w*.022; muzzleY=cy+h*.100;
+    // MAC
+    muzzleX=cx+w*.022; muzzleY=cy+h*.098;
 
-    // barrel + heat shield taper
-    poly([
-      [muzzleX-w*.012,muzzleY-h*.006],[muzzleX+w*.014,muzzleY+h*.008],
-      [w*.720,h*.800],[w*.650,h*.830]
-    ],"#495155","#141719");
-    poly([
-      [w*.610,h*.775],[w*.715,h*.785],
-      [w*.755,h*.845],[w*.630,h*.860]
-    ],"#343a3d");
-    for(let i=0;i<5;i++){
-      line(w*(.635+i*.018),h*.792,w*(.655+i*.018),h*.818,3,"#16191a");
-    }
+    poly([[muzzleX-w*.012,muzzleY-h*.006],[muzzleX+w*.013,muzzleY+h*.008],[w*.724,h*.795],[w*.648,h*.830]],"#70787c","#16191b");
+    poly([[w*.610,h*.772],[w*.720,h*.785],[w*.761,h*.846],[w*.630,h*.862]],"#383f42");
+    for(let i=0;i<5;i++) seg(w*(.635+i*.018),h*.791,w*(.654+i*.018),h*.819,3,"#151819");
 
-    // heavy receiver
-    poly([
-      [w*.600,h*.805],[w*.710,h*.800],
-      [w*.785,h*.900],[w*.635,h*.925]
-    ],"#24292c","#111416");
-    poly([[w*.610,h*.785],[w*.690,h*.780],[w*.720,h*.815],[w*.625,h*.825]],"#697174");
+    poly([[w*.598,h*.805],[w*.715,h*.800],[w*.790,h*.905],[w*.634,h*.930]],"#252a2d","#121516");
+    poly([[w*.610,h*.783],[w*.693,h*.778],[w*.724,h*.815],[w*.626,h*.826]],"#697174");
+    ctx.strokeStyle="#31373a"; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(w*.632,h*.790); ctx.quadraticCurveTo(w*.670,h*.734,w*.710,h*.790); ctx.stroke();
 
-    // carry handle
-    ctx.strokeStyle="#303639";ctx.lineWidth=5;
-    ctx.beginPath();ctx.moveTo(w*.630,h*.790);ctx.quadraticCurveTo(w*.670,h*.735,w*.710,h*.790);ctx.stroke();
-
-    // belt box + visible belt
-    poly([[w*.620,h*.885],[w*.675,h*.875],[w*.705,h*.990],[w*.640,h*.995]],"#394044");
-    ctx.fillStyle="#b99652";
+    poly([[w*.620,h*.882],[w*.676,h*.874],[w*.708,h*.995],[w*.641,h*.997]],"#394044");
+    ctx.fillStyle="#b89856";
     for(let i=0;i<6;i++){
       ctx.save();
       ctx.translate(w*(.688+i*.012),h*(.850+i*.015));
@@ -1519,24 +1502,19 @@ function renderWorld(){
       ctx.restore();
     }
 
-    // pistol grip / stock
-    poly([[w*.705,h*.895],[w*.745,h*.895],[w*.765,h*.980],[w*.720,h*.970]],"#171a1b");
-    poly([[w*.735,h*.850],[w*.805,h*.885],[w*.895,h*.985],[w*.820,h*.955]],"#292f31");
+    poly([[w*.704,h*.894],[w*.745,h*.894],[w*.767,h*.981],[w*.720,h*.972]],"#171a1b");
+    poly([[w*.735,h*.848],[w*.807,h*.885],[w*.900,h*.988],[w*.820,h*.955]],"#2a3033");
+    seg(muzzleX,muzzleY+h*.021,muzzleX,muzzleY-h*.014,3,"#111");
+    seg(w*.702,h*.840,w*.683,h*.960,3,"#272c2e");
+    seg(w*.716,h*.840,w*.770,h*.955,3,"#272c2e");
 
-    // front sight and bipod hint
-    line(muzzleX,muzzleY+h*.022,muzzleX,muzzleY-h*.014,3,"#111");
-    line(w*.700,h*.840,w*.680,h*.960,3,"#272c2e");
-    line(w*.715,h*.840,w*.770,h*.955,3,"#272c2e");
-
-    // firing hand
-    ctx.fillStyle="#3d3934";
-    ctx.beginPath();ctx.ellipse(w*.730,h*.930,w*.045,h*.055,-.18,0,TWO_PI);ctx.fill();
+    drawForearm(w*.640,h*.866,w*.036,h*.041,-.25);
+    drawForearm(w*.732,h*.930,w*.046,h*.056,-.18);
   }
 
-  // muzzle flash comes from the actual forward-facing muzzle
   if(muzzleFlash>0 && player.weapon!==2 && player.weapon!==4){
     const f=8+Math.random()*12;
-    ctx.fillStyle="rgba(255,226,125,.94)";
+    ctx.fillStyle="rgba(255,226,125,.95)";
     ctx.beginPath();
     ctx.moveTo(muzzleX-f,muzzleY);
     ctx.lineTo(muzzleX,muzzleY-f*.9);
