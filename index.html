@@ -184,7 +184,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-04 FIRST-PERSON MUZZLE FIX</div>
+<div id="buildBadge">BUILD 2026-09-05 AUTO-FIRE + SHOTGUN FIX</div>
 
 
 <canvas id="game"></canvas>
@@ -287,12 +287,12 @@ const MAP = [
 ];
 
 const WEAPONS = [
-  {name:"AR", damage:22, rate:7.5, mag:30, range:720, spread:.075, type:"hitscan"},
+  {name:"AR", damage:22, rate:7.5, mag:30, range:720, spread:.075, type:"hitscan", auto:true},
   {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065, type:"hitscan"},
   {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70, type:"melee"},
   {name:"SHOTGUN", damage:15, rate:1.05, mag:6, range:390, spread:.24, type:"shotgun", pellets:8},
   {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"},
-  {name:"MAC", damage:34, rate:9.2, mag:50, range:820, spread:.095, type:"hitscan"}
+  {name:"MAC", damage:34, rate:9.2, mag:50, range:820, spread:.095, type:"hitscan", auto:true}
 ];
 
 const player = {
@@ -629,6 +629,38 @@ function bestTargetInCone(shooter,range,spread,angleOffset=0){
   return best;
 }
 
+function pelletTarget(shooter,range,rayAngle){
+  let best=null;
+  let bestAlong=Infinity;
+
+  // Treat each soldier as a circular hit volume in world space.
+  // This fixes the old bug where close-range pellets still needed to pass
+  // almost exactly through the target's center angle.
+  const HIT_RADIUS=18;
+
+  for(const t of enemyList(shooter===player?0:shooter.team)){
+    if(!t.alive || !los(shooter,t)) continue;
+
+    const dx=t.x-shooter.x;
+    const dy=t.y-shooter.y;
+
+    // Project target position onto pellet ray.
+    const dirX=Math.cos(rayAngle), dirY=Math.sin(rayAngle);
+    const along=dx*dirX+dy*dirY;
+    if(along<=0 || along>range) continue;
+
+    // Perpendicular distance from target center to the pellet ray.
+    const perp=Math.abs(dx*dirY-dy*dirX);
+    if(perp>HIT_RADIUS) continue;
+
+    if(along<bestAlong){
+      bestAlong=along;
+      best=t;
+    }
+  }
+  return best;
+}
+
 function fireBolt(shooter,w){
   const speed=620;
   bolts.push({
@@ -684,7 +716,8 @@ function shoot(shooter,wIndex){
   if(w.type==="shotgun"){
     for(let p=0;p<w.pellets;p++){
       const off=(Math.random()-.5)*w.spread*2;
-      const target=bestTargetInCone(shooter,w.range,.055,off);
+      const pelletAngle=shooter.a+off;
+      const target=pelletTarget(shooter,w.range,pelletAngle);
       if(target) damageTarget(target,w.damage,shooter);
     }
     return;
@@ -1476,6 +1509,14 @@ if(TOUCH){
     touchStartX=e.clientX; touchStartY=e.clientY;
     touchStartTime=performance.now();
     touchDragged=false;
+
+    // Mobile full-auto:
+    // AR and MAC fire continuously for as long as the play area is held.
+    if(WEAPONS[player.weapon]?.auto){
+      firing=true;
+      shoot(player,player.weapon); // immediate first round, no perceived input lag
+    }
+
     canvas.setPointerCapture?.(e.pointerId);
     e.preventDefault();
   });
@@ -1500,9 +1541,14 @@ if(TOUCH){
 
     const elapsed=performance.now()-touchStartTime;
     const moved=Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY);
+    const wasAuto=!!WEAPONS[player.weapon]?.auto;
 
-    // 짧은 탭 = 1발. 드래그 = 시점 회전.
-    if(running && !touchDragged && moved<10 && elapsed<350){
+    // Stop full-auto when the finger leaves the screen.
+    firing=false;
+
+    // Semi-auto / shotgun / crossbow / knife:
+    // short tap still fires exactly once.
+    if(running && !wasAuto && !touchDragged && moved<10 && elapsed<350){
       shoot(player,player.weapon);
     }
 
@@ -1512,7 +1558,10 @@ if(TOUCH){
 
   canvas.addEventListener("pointerup",endLook);
   canvas.addEventListener("pointercancel",e=>{
-    if(e.pointerId===touchLookId) touchLookId=null;
+    if(e.pointerId===touchLookId){
+      firing=false;
+      touchLookId=null;
+    }
     e.preventDefault();
   });
 
