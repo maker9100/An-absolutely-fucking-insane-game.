@@ -131,33 +131,50 @@
     font:800 14px Arial;color:#9aa5af;text-shadow:0 2px 6px #000
   }
   @media (max-width:700px){
-    #buildTag{font-size:10px;padding:6px 8px}
-    #weaponBar{top:calc(5px + var(--safeT));gap:2px;padding:3px;border-radius:10px}
-    .weapon{height:48px;font-size:9px;padding:3px 1px}
-    .weapon b{font-size:12px;margin-bottom:3px}
-    #topInfo{top:calc(62px + var(--safeT));font-size:16px}
-    #roundHud{top:calc(100px + var(--safeT));width:240px;padding:14px 10px}
-    #roundTitle{font-size:22px}
-    #roundScore{font-size:26px}
-    #roundSub{font-size:14px}
-    #cheatHud{top:calc(100px + var(--safeT));max-width:210px}
-    .touchButton{min-width:66px;height:48px;font-size:12px;border-radius:16px}
-    #leftHud{font-size:18px;bottom:calc(140px + var(--safeB))}
-    #healthBarWrap{left:calc(16px + var(--safeL));bottom:calc(122px + var(--safeB));width:min(430px,54vw);padding:12px}
-    #healthBarWrap .title{font-size:18px}
-    #healthBarOuter{height:26px}
-    #crosshair{font-size:48px}
-    #deathNotice{font-size:20px;padding:14px 16px}
-    #reloadButton{right:calc(120px + var(--safeR));bottom:calc(22px + var(--safeB));width:84px;height:84px}
-    #joyBase{width:132px;height:132px}
-    #joyStick{width:56px;height:56px}
+    #buildTag{display:none}
+    #weaponBar{top:calc(4px + var(--safeT));gap:2px;padding:3px;border-radius:9px}
+    .weapon{height:40px;font-size:8px;padding:2px 1px}
+    .weapon b{font-size:10px;margin-bottom:2px}
+    #topInfo{top:calc(50px + var(--safeT));font-size:14px;white-space:nowrap}
+    #roundHud{
+      top:calc(77px + var(--safeT));left:calc(8px + var(--safeL));transform:none;
+      width:156px;padding:8px 7px;border-radius:12px
+    }
+    #roundTitle{font-size:15px}
+    #roundScore{font-size:20px;margin:1px 0}
+    #roundSub{font-size:10px}
+    #cheatHud{
+      top:calc(77px + var(--safeT));right:calc(8px + var(--safeR));
+      max-width:174px;display:grid;grid-template-columns:1fr 1fr;gap:5px
+    }
+    #cheatHud #noRecoilButton{grid-column:1 / 3}
+    .touchButton{min-width:0;width:100%;height:40px;font-size:10px;border-radius:12px;padding:0 6px}
+    #leftHud{
+      left:calc(14px + var(--safeL));bottom:calc(228px + var(--safeB));
+      font-size:14px;line-height:1.25
+    }
+    #healthBarWrap{
+      left:calc(12px + var(--safeL));bottom:calc(148px + var(--safeB));
+      width:210px;padding:9px;border-radius:12px
+    }
+    #healthBarWrap .title{font-size:14px;margin-bottom:6px}
+    #healthBarOuter{height:18px}
+    #crosshair{font-size:42px}
+    #deathNotice{font-size:18px;padding:12px 14px}
+    #reloadButton{
+      right:calc(16px + var(--safeR));bottom:calc(22px + var(--safeB));
+      width:72px;height:72px
+    }
+    #joyBase{width:118px;height:118px;left:calc(14px + var(--safeL));bottom:calc(14px + var(--safeB))}
+    #joyStick{width:50px;height:50px}
+    #onlineStatus{font-size:9px;right:calc(8px + var(--safeR));bottom:calc(5px + var(--safeB))}
   }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div id="buildTag">BUILD 2026-09-05 THREE LOWPOLY PROTOTYPE</div>
+<div id="buildTag">BUILD 2026-09-05 3D PORTRAIT HOTFIX</div>
 
 <div id="menu">
   <div id="menuCard">
@@ -499,86 +516,96 @@ function box(w,h,d,color){
   m.castShadow=false; m.receiveShadow=false;
   return m;
 }
+function cyl(radiusTop,radiusBottom,height,color,segments=8){
+  const m=new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusTop,radiusBottom,height,segments),
+    new THREE.MeshLambertMaterial({color,flatShading:true})
+  );
+  return m;
+}
+function sph(rx,ry,rz,color,segments=8){
+  const g=new THREE.SphereGeometry(1,segments,Math.max(4,Math.floor(segments*.65)));
+  const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color,flatShading:true}));
+  m.scale.set(rx,ry,rz);
+  return m;
+}
+function barrel(radius,length,color){
+  const m=cyl(radius,radius,length,color,8);
+  m.rotation.x=Math.PI/2;
+  return m;
+}
 function createSoldierModel(team){
   const blue=team===0;
-  const cCloth=blue?0x4e79a5:0x8d4a4a;
-  const cArmor=blue?0x70818c:0x7a6d73;
-  const cDark=blue?0x223849:0x402628;
-  const cSkin=0xc59a7d;
-  const cGun=0x2b3135;
-  const cGlass=0x90c7dc;
+  const cCloth=blue?0x466f96:0x87474a;
+  const cCloth2=blue?0x31536f:0x5f3033;
+  const cArmor=blue?0x667681:0x77676c;
+  const cDark=0x20272b;
+  const cSkin=0xbd9275;
+  const cGun=0x272d31;
+  const cGunHi=0x5d676b;
+  const cGlass=0x77b5cb;
 
   const g=new THREE.Group();
 
-  // boots
-  const b1=box(.20,.08,.28,0x1a1a1a), b2=box(.20,.08,.28,0x1a1a1a);
-  b1.position.set(-.12,.04,.02); b2.position.set(.12,.04,.02); g.add(b1,b2);
+  // Legs, faceted cylinders.
+  const leftShin=cyl(.075,.085,.34,cCloth2), rightShin=cyl(.075,.085,.34,cCloth2);
+  leftShin.position.set(-.12,.24,0); rightShin.position.set(.12,.24,0); g.add(leftShin,rightShin);
 
-  // lower legs
-  const l1=box(.15,.34,.15,cDark), l2=box(.15,.34,.15,cDark);
-  l1.position.set(-.12,.25,0); l2.position.set(.12,.25,0); g.add(l1,l2);
+  const leftLeg=cyl(.085,.095,.34,cCloth2), rightLeg=cyl(.085,.095,.34,cCloth2);
+  leftLeg.position.set(-.12,.58,0); rightLeg.position.set(.12,.58,0); g.add(leftLeg,rightLeg);
 
-  // knee pads
-  const k1=box(.17,.08,.17,cArmor), k2=box(.17,.08,.17,cArmor);
-  k1.position.set(-.12,.44,.015); k2.position.set(.12,.44,.015); g.add(k1,k2);
+  const bootL=box(.18,.09,.26,0x16191b), bootR=box(.18,.09,.26,0x16191b);
+  bootL.position.set(-.12,.045,.055); bootR.position.set(.12,.045,.055); g.add(bootL,bootR);
 
-  // thighs
-  const t1=box(.17,.28,.17,cDark), t2=box(.17,.28,.17,cDark);
-  t1.position.set(-.12,.62,0); t2.position.set(.12,.62,0); g.add(t1,t2);
+  const kneeL=box(.16,.085,.16,cArmor), kneeR=box(.16,.085,.16,cArmor);
+  kneeL.position.set(-.12,.40,.055); kneeR.position.set(.12,.40,.055); g.add(kneeL,kneeR);
 
-  // pelvis
-  const pelvis=box(.42,.12,.22,0x22272a); pelvis.position.set(0,.80,0); g.add(pelvis);
+  // Torso as tapered low-poly cylinder.
+  const torso=cyl(.24,.20,.44,cCloth,8); torso.position.set(0,1.03,0); g.add(torso);
+  const carrier=box(.34,.34,.19,cArmor); carrier.position.set(0,1.03,.06); g.add(carrier);
 
-  // torso
-  const torso=box(.44,.42,.24,cCloth); torso.position.set(0,1.08,0); g.add(torso);
-  const carrier=box(.32,.34,.20,cArmor); carrier.position.set(0,1.08,.035); g.add(carrier);
-  const pouch1=box(.09,.09,.05,0x25292c), pouch2=box(.09,.11,.05,0x25292c), pouch3=box(.09,.09,.05,0x25292c);
-  pouch1.position.set(-.11,.97,.145); pouch2.position.set(0,.96,.145); pouch3.position.set(.11,.97,.145); g.add(pouch1,pouch2,pouch3);
+  const belt=box(.40,.08,.22,cDark); belt.position.set(0,.79,0); g.add(belt);
+  const pouch1=box(.085,.10,.06,0x2a3033), pouch2=box(.085,.11,.06,0x2a3033), pouch3=box(.085,.10,.06,0x2a3033);
+  pouch1.position.set(-.11,.93,.145); pouch2.position.set(0,.92,.145); pouch3.position.set(.11,.93,.145); g.add(pouch1,pouch2,pouch3);
 
-  // shoulders
-  const s1=box(.13,.14,.18,cCloth), s2=box(.13,.14,.18,cCloth);
-  s1.position.set(-.28,1.18,0); s2.position.set(.28,1.18,0); g.add(s1,s2);
+  // Arms.
+  const leftArm=cyl(.065,.07,.24,cCloth,7), rightArm=cyl(.065,.07,.24,cCloth,7);
+  leftArm.position.set(-.27,1.08,0); rightArm.position.set(.27,1.08,0);
+  leftArm.rotation.z=-.20; rightArm.rotation.z=.24; g.add(leftArm,rightArm);
 
-  // arms
-  const u1=box(.12,.21,.12,cCloth), u2=box(.12,.21,.12,cCloth);
-  u1.position.set(-.29,1.02,.01); u2.position.set(.29,1.04,.01); g.add(u1,u2);
-  const f1=box(.10,.18,.10,cDark), f2=box(.10,.18,.10,cDark);
-  f1.position.set(-.24,.86,.03); f2.position.set(.23,.90,.03); g.add(f1,f2);
-  const hand1=box(.08,.06,.08,cSkin), hand2=box(.08,.06,.08,cSkin);
-  hand1.position.set(-.18,.77,.05); hand2.position.set(.19,.80,.05); g.add(hand1,hand2);
+  const leftFore=cyl(.055,.06,.22,cCloth2,7), rightFore=cyl(.055,.06,.22,cCloth2,7);
+  leftFore.position.set(-.23,.88,.03); rightFore.position.set(.22,.90,.03);
+  leftFore.rotation.z=.22; rightFore.rotation.z=-.32; g.add(leftFore,rightFore);
 
-  // neck/head
-  const neck=box(.10,.08,.10,cSkin); neck.position.set(0,1.34,0); g.add(neck);
-  const head=box(.28,.24,.24,cSkin); head.position.set(0,1.52,0); g.add(head);
+  const handL=sph(.065,.05,.065,cSkin,7), handR=sph(.065,.05,.065,cSkin,7);
+  handL.position.set(-.17,.78,.06); handR.position.set(.17,.80,.06); g.add(handL,handR);
 
-  // helmet
-  const helmet=box(.32,.12,.28,cDark); helmet.position.set(0,1.66,0); g.add(helmet);
-  const visor=box(.24,.06,.02,0x101416); visor.position.set(0,1.54,.13); g.add(visor);
-  const gloss=box(.09,.02,.01,cGlass); gloss.position.set(-.05,1.55,.145); g.add(gloss);
-  const gloss2=box(.09,.02,.01,cGlass); gloss2.position.set(.05,1.55,.145); g.add(gloss2);
+  // Head/helmet.
+  const neck=cyl(.055,.06,.09,cSkin,7); neck.position.set(0,1.34,0); g.add(neck);
+  const head=sph(.145,.17,.135,cSkin,8); head.position.set(0,1.52,0); g.add(head);
+  const helmet=sph(.175,.10,.155,cCloth2,8); helmet.position.set(0,1.66,-.005); g.add(helmet);
+  const visor=box(.24,.055,.025,0x11171a); visor.position.set(0,1.545,.135); g.add(visor);
+  const lensL=box(.09,.018,.006,cGlass), lensR=box(.09,.018,.006,cGlass);
+  lensL.position.set(-.052,1.553,.153); lensR.position.set(.052,1.553,.153); g.add(lensL,lensR);
 
-  // team patch
-  const patch=box(.04,.08,.01,blue?0x75c6ee:0xe47873); patch.position.set(-.24,1.14,.13); g.add(patch);
+  // Rifle in a more natural horizontal hold.
+  const rifleBody=box(.38,.075,.065,cGun); rifleBody.position.set(.03,.88,.09); g.add(rifleBody);
+  const handguard=box(.30,.052,.052,cGunHi); handguard.position.set(.33,.89,.09); g.add(handguard);
+  const gunBarrel=barrel(.014,.25,0x171a1c); gunBarrel.rotation.z=Math.PI/2; gunBarrel.position.set(.58,.89,.09); g.add(gunBarrel);
+  const mag=box(.075,.17,.05,0x1c2225); mag.rotation.z=.08; mag.position.set(.02,.77,.09); g.add(mag);
+  const stock=box(.17,.065,.07,0x2b3235); stock.position.set(-.20,.89,.08); g.add(stock);
 
-  // rifle
-  const rifleBody=box(.38,.08,.05,cGun); rifleBody.position.set(.06,.86,.03); g.add(rifleBody);
-  const handguard=box(.30,.05,.04,0x5f676b); handguard.position.set(.35,.87,.03); g.add(handguard);
-  const barrel=box(.20,.02,.02,0x171a1c); barrel.position.set(.58,.88,.03); g.add(barrel);
-  const mag=box(.07,.18,.04,0x1e2224); mag.position.set(.02,.76,.04); g.add(mag);
-  const stock=box(.16,.06,.05,0x262b2e); stock.position.set(-.18,.89,.02); g.add(stock);
+  const patch=box(.045,.075,.012,blue?0x74c9f0:0xe26e6a); patch.position.set(-.235,1.08,.13); g.add(patch);
 
-  g.userData={
-    leftArm:u1, leftFore:f1, rightArm:u2, rightFore:f2,
-    leftLeg:t1, rightLeg:t2, leftShin:l1, rightShin:l2,
-    rifleBody, handguard, barrel
-  };
+  g.userData={leftArm,leftFore,rightArm,rightFore,leftLeg,rightLeg,leftShin,rightShin,rifleBody,handguard,barrel:gunBarrel};
   return g;
 }
 function makeWeaponMat(c){ return new THREE.MeshLambertMaterial({color:c}); }
 function createViewModels(){
   const root=new THREE.Group();
   camera.add(root);
-  root.position.set(0,-.1,-.1);
+  root.position.set(.16,-.18,-.28);
+  root.scale.setScalar(.72);
   root.userData.weapons=[];
   scene.add(camera);
 
@@ -659,6 +686,19 @@ function createViewModels(){
   return root;
 }
 const viewModelRoot=createViewModels();
+
+function updateViewModelLayout(){
+  const portrait=innerHeight>innerWidth;
+  if(portrait){
+    viewModelRoot.scale.setScalar(.48);
+    viewModelRoot.position.set(.20,-.24,-.34);
+  }else{
+    viewModelRoot.scale.setScalar(.72);
+    viewModelRoot.position.set(.16,-.18,-.28);
+  }
+}
+updateViewModelLayout();
+
 function updateViewModelVisibility(){
   viewModelRoot.userData.weapons.forEach((g,i)=>g.visible=i===player.weapon);
 }
@@ -1172,8 +1212,10 @@ function updatePlayer(dt){
   camera.rotation.x = player.pitch - recoilPitch;
 
   const vm=viewModelRoot;
-  vm.position.set(.0 + bobX*.9, -.14 - bobY*1.5 - recoilKick*.3, -.1);
-  vm.rotation.set(recoilPitch*.28, -recoilYaw*.2, recoilYaw*.18);
+  const portrait=innerHeight>innerWidth;
+  const bx=portrait?.20:.16, by=portrait?-.24:-.18, bz=portrait?-.34:-.28;
+  vm.position.set(bx + bobX*.65, by - bobY*1.2 - recoilKick*.22, bz);
+  vm.rotation.set(recoilPitch*.22, -recoilYaw*.16, recoilYaw*.14);
 
   updateHud();
 }
@@ -1368,6 +1410,7 @@ window.addEventListener("resize",()=>{
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
+  updateViewModelLayout();
 });
 
 // initial
