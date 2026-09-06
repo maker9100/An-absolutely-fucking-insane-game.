@@ -230,6 +230,20 @@ button{font:inherit}
   #onlineMatchBanner{top:calc(112px + var(--safeT));font-size:9px}
 }
 
+
+/* ===== COMBAT POLISH ===== */
+#killFeed{position:fixed;z-index:70;right:calc(14px + var(--safeR));top:calc(92px + var(--safeT));width:min(360px,46vw);display:flex;flex-direction:column;gap:5px;pointer-events:none;font:800 12px/1.2 Arial;text-align:right}
+.killEntry{align-self:flex-end;max-width:100%;padding:6px 8px;border-radius:6px;background:rgba(5,7,9,.72);border:1px solid rgba(255,255,255,.12);color:#e8e8e8;text-shadow:0 1px 2px #000;animation:killIn .13s ease-out,killOut .4s ease-in 4.1s forwards}
+.killEntry .blue{color:#74caff}.killEntry .red{color:#ff7f7f}.killEntry .weaponTag{color:#ffc56d;margin:0 5px}.killEntry.selfKill{border-color:#d69a4c;background:rgba(52,35,16,.86)}
+@keyframes killIn{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}@keyframes killOut{to{transform:translateX(12px);opacity:0}}
+#lowHpOverlay{position:fixed;inset:0;z-index:48;pointer-events:none;opacity:0;background:radial-gradient(circle at center,transparent 48%,rgba(100,0,0,.60) 100%);mix-blend-mode:multiply}
+#reloadIndicator{position:fixed;z-index:68;left:50%;bottom:calc(102px + var(--safeB));transform:translateX(-50%);width:min(230px,48vw);display:none;color:#eee;text-align:center;font:800 10px Arial;letter-spacing:.12em;pointer-events:none}
+#reloadTrack{height:4px;margin-top:5px;background:#000b;border:1px solid #ffffff2c}#reloadFill{height:100%;width:0;background:#d89b50}
+#soundToggle{margin-top:8px;opacity:.86}
+#combatToast{position:fixed;z-index:69;left:50%;top:57%;transform:translate(-50%,-50%);pointer-events:none;color:white;font:900 16px Arial;letter-spacing:.08em;text-shadow:0 2px 6px #000;opacity:0}
+#combatToast.show{animation:combatToast .5s ease-out}@keyframes combatToast{0%{opacity:0;transform:translate(-50%,-46%) scale(.8)}25%{opacity:1}100%{opacity:0;transform:translate(-50%,-58%) scale(1.08)}}
+@media(max-width:700px){#killFeed{top:calc(150px + var(--safeT));width:58vw;font-size:9px}.killEntry{padding:5px 6px}#reloadIndicator{bottom:calc(186px + var(--safeB));width:170px}}
+
 </style>
 </head>
 <body>
@@ -240,6 +254,10 @@ button{font:inherit}
   <div id="roundRule">FIRST TO 5</div>
 </div>
 <div id="damageOverlay"></div>
+<div id="lowHpOverlay"></div>
+<div id="killFeed"></div>
+<div id="reloadIndicator"><div id="reloadLabel">RELOADING</div><div id="reloadTrack"><div id="reloadFill"></div></div></div>
+<div id="combatToast"></div>
 <div id="deathNotice">ELIMINATED<br><small>SPECTATOR MODE</small></div>
 <div id="spectatorHud">SPECTATING</div>
 <div id="movementState" class="hidden">SPACE JUMP · CTRL/C CROUCH</div>
@@ -250,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-06 PATHFINDING AI</div>
+<div id="buildBadge">BUILD 2026-09-07 COMBAT POLISH</div>
 
 
 <canvas id="game"></canvas>
@@ -261,6 +279,7 @@ button{font:inherit}
   
   <button id="startAI" class="menuButton primary">AI 5v5 시작</button>
   <button id="online" class="menuButton">ONLINE 5v5 (Firebase)</button>
+  <button id="soundToggle" class="menuButton">SOUND : ON</button>
   <p id="serverText">GitHub Pages 클라이언트 · ONLINE = Firebase</p>
 </div>
 
@@ -515,12 +534,12 @@ function applyMap(index){
 
 
 const WEAPONS = [
-  {name:"AR", damage:22, rate:7.5, mag:30, range:720, spread:.075, type:"hitscan", auto:true},
-  {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065, type:"hitscan"},
-  {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70, type:"melee"},
-  {name:"SHOTGUN", damage:15, rate:1.05, mag:6, range:390, spread:.24, type:"shotgun", pellets:8},
-  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile"},
-  {name:"MAC", damage:34, rate:9.2, mag:50, range:820, spread:.095, type:"hitscan", auto:true}
+  {name:"AR", damage:22, rate:7.5, mag:30, range:720, spread:.075, type:"hitscan", auto:true, reload:1.75, shake:.0045, flash:1.00},
+  {name:"PISTOL", damage:40, rate:3.2, mag:12, range:620, spread:.065, type:"hitscan", reload:1.35, shake:.0060, flash:.82},
+  {name:"KNIFE", damage:70, rate:1.8, mag:999, range:78, spread:.70, type:"melee", reload:0, shake:.0020, flash:0},
+  {name:"SHOTGUN", damage:15, rate:1.05, mag:6, range:390, spread:.24, type:"shotgun", pellets:8, reload:2.30, shake:.0160, flash:1.75},
+  {name:"CROSSBOW", damage:95, rate:.72, mag:1, range:980, spread:.035, type:"projectile", reload:1.95, shake:.0080, flash:0},
+  {name:"MAC", damage:34, rate:9.2, mag:50, range:820, spread:.095, type:"hitscan", auto:true, reload:3.05, shake:.0190, flash:1.35}
 ];
 
 const player = {
@@ -580,7 +599,22 @@ let recoilPitch = 0;   // temporary vertical recoil only
 let recoilKick = 0;
 let recoilSide = 0;
 let muzzleFlash = 0;
+let muzzleFlashStrength = 1;
 let hitMarker = 0;
+let hitMarkerKill = false;
+let screenShakeYaw = 0;
+let screenShakeY = 0;
+let hurtDirection = 0;
+let hurtTimer = 0;
+let moveBobPhase = 0;
+let moveBobAmount = 0;
+let reloading = false;
+let reloadWeaponIndex = -1;
+let reloadStartedAt = 0;
+let reloadEndAt = 0;
+let lastHeartbeatAt = -999;
+let localShotSeq = 0;
+const casings = [];
 const bolts = [];
 const impacts = [];
 const bloodFx = [];
@@ -618,6 +652,63 @@ function resize(){
 }
 addEventListener("resize", resize, {passive:true});
 resize();
+
+
+/* =========================================================
+   PROCEDURAL AUDIO — original in-browser WebAudio synthesis.
+========================================================= */
+const AUDIO_PREF_KEY="cheatArena.soundEnabled.v1";
+const audioFX={ctx:null,master:null,enabled:localStorage.getItem(AUDIO_PREF_KEY)!=="0",noiseBuffer:null};
+
+function ensureAudio(){
+  if(!audioFX.enabled) return null;
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC) return null;
+  if(!audioFX.ctx){
+    const ac=new AC(),master=ac.createGain();master.gain.value=.58;master.connect(ac.destination);
+    audioFX.ctx=ac;audioFX.master=master;
+    const len=Math.max(1,Math.floor(ac.sampleRate*.55)),b=ac.createBuffer(1,len,ac.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+    audioFX.noiseBuffer=b;
+  }
+  if(audioFX.ctx.state==="suspended")audioFX.ctx.resume().catch(()=>{});
+  return audioFX.ctx;
+}
+function oscBurst(type,f0,f1,dur,vol,delay=0){
+  const ac=ensureAudio();if(!ac)return;const t=ac.currentTime+delay,o=ac.createOscillator(),g=ac.createGain();
+  o.type=type;o.frequency.setValueAtTime(Math.max(20,f0),t);o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
+  g.gain.setValueAtTime(Math.max(.0001,vol),t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g);g.connect(audioFX.master);o.start(t);o.stop(t+dur+.02);
+}
+function noiseBurst(dur,vol,cutoff=1600,delay=0){
+  const ac=ensureAudio();if(!ac||!audioFX.noiseBuffer)return;const t=ac.currentTime+delay,s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();
+  s.buffer=audioFX.noiseBuffer;f.type="lowpass";f.frequency.value=cutoff;
+  g.gain.setValueAtTime(Math.max(.0001,vol),t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  s.connect(f);f.connect(g);g.connect(audioFX.master);s.start(t);s.stop(t+dur+.02);
+}
+function sfxWeapon(wIndex,shooter){
+  if(!audioFX.enabled)return;
+  const local=shooter===player,d=local?0:dist(player,shooter),v=local?1:Math.max(.06,1-d/900);if(v<=.06)return;
+  if(wIndex===0){noiseBurst(.075,.34*v,2300);oscBurst("square",145,72,.085,.13*v)}
+  else if(wIndex===1){noiseBurst(.055,.31*v,3000);oscBurst("triangle",220,100,.07,.12*v)}
+  else if(wIndex===2){noiseBurst(.09,.16*v,5200);oscBurst("sine",430,210,.08,.045*v)}
+  else if(wIndex===3){noiseBurst(.18,.60*v,1900);oscBurst("sawtooth",105,42,.17,.23*v);noiseBurst(.08,.16*v,5000,.025)}
+  else if(wIndex===4){noiseBurst(.045,.12*v,4200);oscBurst("triangle",480,130,.14,.10*v)}
+  else if(wIndex===5){noiseBurst(.085,.42*v,2100);oscBurst("square",118,55,.09,.18*v)}
+}
+function sfxHit(){oscBurst("sine",1120,760,.045,.065)}
+function sfxKill(){oscBurst("triangle",620,820,.06,.09);oscBurst("triangle",820,1180,.085,.08,.055)}
+function sfxHurt(){noiseBurst(.10,.20,900);oscBurst("sine",95,50,.18,.13)}
+function sfxEmpty(){oscBurst("square",930,690,.035,.035)}
+function sfxReloadStart(w){oscBurst("square",420,280,.035,.035);noiseBurst(.028,.045,4500,.045);if(w===3||w===5)oscBurst("triangle",180,125,.08,.035,.09)}
+function sfxReloadDone(w){oscBurst("square",260,520,.035,.045);if(w===4)oscBurst("triangle",620,300,.06,.035,.04)}
+function sfxRound(){oscBurst("triangle",310,430,.08,.055);oscBurst("triangle",430,610,.10,.06,.08)}
+function sfxRoundWin(){oscBurst("triangle",440,660,.09,.06);oscBurst("triangle",660,880,.12,.07,.10)}
+function sfxRoundLose(){oscBurst("sine",220,150,.16,.07)}
+function sfxLand(){noiseBurst(.07,.08,650);oscBurst("sine",80,45,.08,.045)}
+function sfxHeartbeat(){oscBurst("sine",72,48,.11,.055);oscBurst("sine",68,46,.10,.045,.16)}
+function setSoundEnabled(on){audioFX.enabled=!!on;localStorage.setItem(AUDIO_PREF_KEY,on?"1":"0");const b=$("soundToggle");if(b)b.textContent=`SOUND : ${on?"ON":"OFF"}`;if(on)ensureAudio()}
+function combatToast(text){const el=$("combatToast");if(!el)return;el.textContent=text;el.classList.remove("show");void el.offsetWidth;el.classList.add("show")}
+addEventListener("pointerdown",()=>ensureAudio(),{passive:true});addEventListener("keydown",()=>ensureAudio(),{passive:true});
 
 function notify(text){
   ui.notice.textContent = text;
@@ -887,35 +978,49 @@ function spawnEntity(e){
   else resetBotNavigation(e);
 }
 
-function killEntity(victim,killer){
-  if(!victim.alive) return;
-  victim.alive=false;
-  victim.hp=0;
 
+function entityDisplayName(e){
+  if(!e)return"WORLD";
+  if(e===player)return onlineMode?(String($("onlineNickname")?.value||"YOU").trim().slice(0,12)||"YOU"):"YOU";
+  return e.name||"PLAYER";
+}
+function teamClass(team){return team===0?"blue":"red"}
+function addKillFeed(killerName,victimName,weaponName,killerTeam,selfKill=false){
+  const feed=$("killFeed");if(!feed)return;const row=document.createElement("div");row.className="killEntry"+(selfKill?" selfKill":"");
+  const victimTeam=killerTeam===0?1:0;
+  row.innerHTML=`<span class="${teamClass(killerTeam)}">${escapeOnlineHtml(killerName)}</span><span class="weaponTag">[${escapeOnlineHtml(weaponName||"AR")}]</span><span class="${teamClass(victimTeam)}">${escapeOnlineHtml(victimName)}</span>`;
+  feed.prepend(row);while(feed.children.length>6)feed.lastElementChild.remove();setTimeout(()=>row.remove(),4600);
+}
+function confirmHit(amount,willKill=false){hitMarker=.16;hitMarkerKill=!!willKill;if(willKill){sfxKill();combatToast("ELIMINATION")}else sfxHit()}
+function onPlayerHurt(amount,shooter){
+  damageFlash=Math.min(1,damageFlash+.82);screenShakeYaw+=(Math.random()-.5)*.025;screenShakeY+=(Math.random()-.5)*16;hurtTimer=.72;
+  if(shooter)hurtDirection=norm(angle(player,shooter)-player.a);sfxHurt();
+}
+function updateCombatPolish(dt){
+  screenShakeYaw*=Math.pow(.0035,dt);screenShakeY*=Math.pow(.004,dt);hurtTimer=Math.max(0,hurtTimer-dt);
+  const low=$("lowHpOverlay");if(low){const lf=player.alive?Math.max(0,(35-player.hp)/35):0,p=.55+.45*Math.sin(gameTime*6.5);low.style.opacity=String(Math.min(.62,lf*(.26+.28*p)))}
+  if(player.alive&&player.hp<=25&&gameTime-lastHeartbeatAt>1.15){lastHeartbeatAt=gameTime;sfxHeartbeat()}
+  if(reloading&&gameTime>=reloadEndAt){const wi=reloadWeaponIndex;if(wi>=0&&player.alive){player.ammo[wi]=WEAPONS[wi].mag;sfxReloadDone(wi);if(wi===player.weapon)notify(wi===4?"석궁 장전 완료":"재장전 완료")}reloading=false;reloadWeaponIndex=-1}
+  for(let i=casings.length-1;i>=0;i--){const c=casings[i];c.life-=dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.vy+=520*dt;c.r+=c.vr*dt;if(c.life<=0)casings.splice(i,1)}
+}
+function spawnCasing(wIndex){
+  if(wIndex===2||wIndex===4)return;const w=innerWidth,h=innerHeight;
+  casings.push({x:w*.66+Math.random()*12,y:h*.80+Math.random()*8,vx:90+Math.random()*90,vy:-140-Math.random()*90,r:Math.random()*2,vr:5+Math.random()*7,life:.45+.2*Math.random()});
+  if(casings.length>22)casings.shift();
+}
+
+function killEntity(victim,killer){
+  if(!victim.alive)return;
+  victim.alive=false;victim.hp=0;
   if(onlineMode){
-    if(victim===player){
-      player.deaths++;
-      player.crouched=false;
-      player.jumpZ=0;
-      player.jumpVel=0;
-      firing=false;
-      ensureSpectateTarget();
-      syncOnlineState(true);
-    }
+    if(victim===player){player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget();syncOnlineState(true)}
     return;
   }
-
-  const team = killer===player ? player.team : killer.team;
-  if(team===0) scoreB++; else scoreR++;
-  if(killer===player) player.kills++;
-  if(victim===player){
-    player.deaths++;
-    player.crouched=false;
-    player.jumpZ=0;
-    player.jumpVel=0;
-    firing=false;
-    ensureSpectateTarget();
-  }
+  const killerTeam=killer===player?player.team:(killer?.team??1),weaponIndex=killer===player?player.weapon:0;
+  if(killerTeam===0)scoreB++;else scoreR++;
+  if(killer===player)player.kills++;
+  addKillFeed(entityDisplayName(killer),entityDisplayName(victim),WEAPONS[weaponIndex]?.name||"AR",killerTeam,killer===player);
+  if(victim===player){player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget()}
   checkRoundEnd();
 }
 
@@ -975,6 +1080,7 @@ function resetMatchScore(){
   scoreR=0;
   player.kills=0;
   player.deaths=0;
+  localShotSeq=0;
   updateRoundHud();
 }
 
@@ -1013,6 +1119,9 @@ function enterLobby(){
   bolts.length=0;
   impacts.length=0;
   bloodFx.length=0;
+  casings.length=0;
+  reloading=false;reloadWeaponIndex=-1;
+  $("killFeed")?.replaceChildren();
 
   resetMatchScore();
 }
@@ -1052,6 +1161,8 @@ function beginNextRound(){
   bolts.length=0;
   impacts.length=0;
   bloodFx.length=0;
+  casings.length=0;
+  reloading=false;reloadWeaponIndex=-1;
   damageFlash=0;
   cameraPitch=0;
   recoilPitch=0;
@@ -1059,6 +1170,7 @@ function beginNextRound(){
   recoilSide=0;
 
   updateRoundHud();
+  sfxRound();
   notify(`ROUND ${roundNumber}`);
 }
 
@@ -1102,6 +1214,7 @@ function finishRound(winnerTeam){
   }
 
   matchState=MATCH_STATE.ROUND_END;
+  if(winnerTeam===player.team)sfxRoundWin();else sfxRoundLose();
   notify(winnerTeam===0 ? "BLUE ROUND WIN" : "RED ROUND WIN");
   roundNumber++;
   roundRestartAt=gameTime+1.6;
@@ -1119,25 +1232,14 @@ function checkRoundEnd(){
 }
 
 function damageTarget(target,amount,shooter){
-  if(!target || !target.alive) return;
-
-  // In Firebase multiplayer each client owns its own HP.
-  // The shooter sends a damage event; the victim applies it locally.
-  if(onlineMode && shooter===player && target.remote){
-    spawnBlood(target);
-    hitMarker=.12;
-    target.hp=Math.max(0,target.hp-amount); // visual prediction until Firebase snapshot arrives
-    sendOnlineDamage(target.uid,amount,player.weapon);
-    return;
+  if(!target||!target.alive)return;
+  if(onlineMode&&shooter===player&&target.remote){
+    spawnBlood(target);const predictedKill=(target.hp-amount)<=0;confirmHit(amount,false);if(predictedKill)hitMarkerKill=true;target.hp=Math.max(0,target.hp-amount);sendOnlineDamage(target.uid,amount,player.weapon);return;
   }
-
-  target.hp-=amount;
-  spawnBlood(target);
-  if(shooter===player) hitMarker=.12;
-  if(target===player){
-    damageFlash=Math.min(1,damageFlash+.75);
-  }
-  if(target.hp<=0) killEntity(target,shooter);
+  const willKill=(target.hp-amount)<=0;target.hp-=amount;spawnBlood(target);
+  if(shooter===player&&target!==player)confirmHit(amount,willKill);
+  if(target===player)onPlayerHurt(amount,shooter);
+  if(target.hp<=0)killEntity(target,shooter);
 }
 
 function bestTargetInCone(shooter,range,spread,angleOffset=0){
@@ -1202,11 +1304,13 @@ function fireBolt(shooter,w){
 
 function shoot(shooter,wIndex){
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
+  if(!shooter.alive) return;
+  if(shooter===player && reloading) return;
   if(shooter===player && player.weapon!==2 && player.ammo[wIndex]<=0){
+    sfxEmpty();
     reload();
     return;
   }
-  if(!shooter.alive) return;
   const w=WEAPONS[wIndex];
   if(!w || gameTime < shooter.nextShot) return;
 
@@ -1216,11 +1320,13 @@ function shoot(shooter,wIndex){
   }
 
   shooter.nextShot=gameTime+1/w.rate;
+  sfxWeapon(wIndex,shooter);
 
   if(shooter===player){
+    localShotSeq++;
     if(wIndex!==2) player.ammo[wIndex]--;
   if(shooter===player && wIndex!==2 && player.ammo[wIndex]<=0){
-    setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reloadWeapon(wIndex); },80);
+    setTimeout(()=>{ if(running && player.alive && player.weapon===wIndex && player.ammo[wIndex]<=0) startReload(wIndex); },80);
   }
 
     if(wIndex===2 || noRecoil){
@@ -1237,7 +1343,11 @@ function shoot(shooter,wIndex){
       recoilSide+=(Math.random()-.5)*sideTable[wIndex];
       player.a+=recoilSide*(wIndex===5?1.8:1);
     }
-    muzzleFlash = wIndex===2 ? 0 : .075;
+    muzzleFlash = wIndex===2 ? 0 : (wIndex===3?.12:.075);
+    muzzleFlashStrength=w.flash||1;
+    screenShakeYaw+=(Math.random()-.5)*(w.shake||.004);
+    screenShakeY+=(Math.random()-.5)*(w.shake||.004)*650;
+    spawnCasing(wIndex);
   }
 
   if(w.type==="shotgun"){
@@ -1259,16 +1369,20 @@ function shoot(shooter,wIndex){
   if(best) damageTarget(best,w.damage,shooter);
 }
 
-function reloadWeapon(wIndex=player.weapon){
-  if(wIndex===2) return;
-  player.ammo[wIndex]=WEAPONS[wIndex].mag;
-  if(wIndex===player.weapon) notify(wIndex===4 ? "석궁 장전" : "재장전");
+function startReload(wIndex=player.weapon){
+  if(!player.alive||matchState!==MATCH_STATE.PLAYING)return;
+  if(wIndex===2)return;
+  const w=WEAPONS[wIndex];if(!w||player.ammo[wIndex]>=w.mag||reloading)return;
+  reloading=true;reloadWeaponIndex=wIndex;reloadStartedAt=gameTime;reloadEndAt=gameTime+w.reload;firing=false;sfxReloadStart(wIndex);
+  notify(wIndex===4?"석궁 장전 중...":"재장전 중...");
 }
-function reload(){ reloadWeapon(player.weapon); }
+function cancelReload(){reloading=false;reloadWeaponIndex=-1}
+function reloadWeapon(wIndex=player.weapon){startReload(wIndex)}
+function reload(){startReload(player.weapon)}
 
 function selectWeapon(i){
-  player.weapon=Math.max(0,Math.min(WEAPONS.length-1,i));
-  document.querySelectorAll(".weapon").forEach((b,n)=>b.classList.toggle("active",n===player.weapon));
+  const next=Math.max(0,Math.min(WEAPONS.length-1,i));if(next!==player.weapon)cancelReload();
+  player.weapon=next;document.querySelectorAll(".weapon").forEach((b,n)=>b.classList.toggle("active",n===player.weapon));
 }
 
 function toggleAim(){
@@ -1305,8 +1419,10 @@ function resetCheats(){
   recoilSide=0;
 }
 
-ui.startAI.addEventListener("click",startMatch);
-ui.online.addEventListener("click",openOnlinePanel);
+ui.startAI.addEventListener("click",()=>{ensureAudio();startMatch();});
+ui.online.addEventListener("click",()=>{ensureAudio();openOnlinePanel();});
+$("soundToggle")?.addEventListener("click",()=>setSoundEnabled(!audioFX.enabled));
+setSoundEnabled(audioFX.enabled);
 
 function updatePlayer(dt){
   if(!player.alive) return;
@@ -1333,8 +1449,8 @@ function updatePlayer(dt){
       player.jumpZ=0;
       player.jumpVel=0;
       if(prevZ>0){
-        // Small camera impact on landing; decays below.
         player.landingKick=14;
+        sfxLand();
       }
     }
   }
@@ -1395,6 +1511,7 @@ function updatePlayer(dt){
   recoilSide *= Math.pow(0.01, dt);
   muzzleFlash=Math.max(0,muzzleFlash-dt);
   hitMarker=Math.max(0,hitMarker-dt);
+  if(hitMarker<=0)hitMarkerKill=false;
   damageFlash=Math.max(0,damageFlash-dt*2.6);
   const dmg=document.getElementById("damageOverlay");
   if(dmg) dmg.style.opacity=String(Math.min(.82,damageFlash));
@@ -1405,6 +1522,9 @@ function updatePlayer(dt){
   // Crouching is slower; air control is slightly weaker than ground movement.
   let speed=player.crouched?86:150;
   if(player.jumpZ>0) speed*=.92;
+  const moving=Math.min(1,Math.hypot(f,s)),grounded=player.jumpZ<=.1;
+  moveBobAmount+=((moving&&grounded?1:0)-moveBobAmount)*Math.min(1,dt*10);
+  moveBobPhase+=dt*(player.crouched?6.0:9.3)*moving;
 
   const dx=(Math.cos(player.a)*f+Math.cos(player.a+Math.PI/2)*s)*speed*dt;
   const dy=(Math.sin(player.a)*f+Math.sin(player.a+Math.PI/2)*s)*speed*dt;
@@ -1855,6 +1975,7 @@ function renderWorld(){
   const spectating=!player.alive && cam!==player;
   const camRecoil=spectating?0:recoilPitch;
   const viewPitch=spectating?(cam.pitch||0):cameraPitch;
+  const viewAngle=cam.a+(spectating?0:screenShakeYaw);
 
   // Camera height in "wall-height units".
   // 0 = floor, 1 = top of a wall. Standing eye height is around 0.50.
@@ -1868,7 +1989,7 @@ function renderWorld(){
   // Positive pitch = looking up, which moves the horizon downward.
   const pitchOffset=Math.tan(viewPitch)*h*.62;
   const landingOffset=spectating?0:player.landingKick;
-  const horizon = h/2 + pitchOffset + camRecoil*h*1.9 + landingOffset;
+  const horizon = h/2 + pitchOffset + camRecoil*h*1.9 + landingOffset + (spectating?0:screenShakeY);
 
   const sky=ctx.createLinearGradient(0,0,0,horizon);
   sky.addColorStop(0,"#33414d");
@@ -1895,13 +2016,13 @@ function renderWorld(){
 
   const step = w > 900 ? 2 : 3;
   for(let x=0;x<w;x+=step){
-    const ra=cam.a-FOV/2+(x/w)*FOV;
+    const ra=viewAngle-FOV/2+(x/w)*FOV;
     let d=2;
     while(d<1400){
       if(wall(cam.x+Math.cos(ra)*d,cam.y+Math.sin(ra)*d)) break;
       d+=5;
     }
-    d*=Math.cos(ra-cam.a);
+    d*=Math.cos(ra-viewAngle);
     const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const wallTop=horizon-wh*(1-cameraHeight);
     const wallBottom=horizon+wh*cameraHeight;
@@ -1919,7 +2040,7 @@ function renderWorld(){
   const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
   for(const e of entities){
     const d=dist(cam,e);
-    const da=norm(angle(cam,e)-cam.a);
+    const da=norm(angle(cam,e)-viewAngle);
     if(Math.abs(da)>FOV*.68) continue;
     const sx=w/2+(da/FOV)*w;
     const sz=Math.min(h*.72,17000/Math.max(d,1));
@@ -1957,7 +2078,7 @@ function renderWorld(){
   for(const p of bloodFx){
     const dx=p.x-cam.x,dy=p.y-cam.y,d=Math.hypot(dx,dy);
     if(d<7) continue;
-    const da=norm(Math.atan2(dy,dx)-cam.a);
+    const da=norm(Math.atan2(dy,dx)-viewAngle);
     if(Math.abs(da)<FOV*.58){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon-(Math.min(1800/d,80)*.35);
@@ -1971,7 +2092,7 @@ function renderWorld(){
   for(const b of bolts){
     const dx=b.x-cam.x, dy=b.y-cam.y;
     const d=Math.hypot(dx,dy);
-    const da=norm(Math.atan2(dy,dx)-cam.a);
+    const da=norm(Math.atan2(dy,dx)-viewAngle);
     if(Math.abs(da)<FOV*.58 && d>8){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon;
@@ -1988,7 +2109,7 @@ function renderWorld(){
   }
   for(const s of impacts){
     const dx=s.x-cam.x,dy=s.y-cam.y,d=Math.hypot(dx,dy);
-    const da=norm(Math.atan2(dy,dx)-cam.a);
+    const da=norm(Math.atan2(dy,dx)-viewAngle);
     if(Math.abs(da)<FOV*.58&&d>6){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon;
@@ -2007,9 +2128,15 @@ function renderWorld(){
   const jumpRatio=spectating?0:Math.min(1,player.jumpZ/30);
   const verticalVelocity=spectating?0:player.jumpVel;
   const jumpWeaponDrop=spectating?0:(jumpRatio*h*.018 - verticalVelocity*.010 + player.crouchBlend*h*.010 + player.landingKick*.55);
+  const bobX=spectating?0:Math.sin(moveBobPhase)*7*moveBobAmount,bobY=spectating?0:Math.abs(Math.cos(moveBobPhase))*5*moveBobAmount;
+  let reloadPose=0;
+  if(!spectating&&reloading&&reloadWeaponIndex===player.weapon){
+    const total=Math.max(.01,reloadEndAt-reloadStartedAt),rp=Math.max(0,Math.min(1,(gameTime-reloadStartedAt)/total));
+    reloadPose=Math.sin(rp*Math.PI);
+  }
 
   ctx.save();
-  ctx.translate(kickX,kickY+jumpWeaponDrop);
+  ctx.translate(kickX+bobX+reloadPose*w*.025,kickY+jumpWeaponDrop+bobY+reloadPose*h*.075);
 
   const poly=(pts,fill,stroke=null)=>{
     ctx.beginPath();
@@ -2175,7 +2302,7 @@ function renderWorld(){
   }
 
   if(muzzleFlash>0 && viewWeapon!==2 && viewWeapon!==4){
-    const f=8+Math.random()*12;
+    const f=(8+Math.random()*12)*muzzleFlashStrength;
     ctx.fillStyle="rgba(255,226,125,.95)";
     ctx.beginPath();
     ctx.moveTo(muzzleX-f,muzzleY);
@@ -2190,8 +2317,8 @@ function renderWorld(){
 
   if(hitMarker>0){
     const cx=w/2,cy=h/2;
-    ctx.strokeStyle=`rgba(255,255,255,${Math.min(1,hitMarker*10)})`;
-    ctx.lineWidth=2;
+    ctx.strokeStyle=hitMarkerKill?`rgba(255,110,80,${Math.min(1,hitMarker*10)})`:`rgba(255,255,255,${Math.min(1,hitMarker*10)})`;
+    ctx.lineWidth=hitMarkerKill?3:2;
     ctx.beginPath();
     ctx.moveTo(cx-12,cy-12);ctx.lineTo(cx-5,cy-5);
     ctx.moveTo(cx+12,cy-12);ctx.lineTo(cx+5,cy-5);
@@ -2199,6 +2326,11 @@ function renderWorld(){
     ctx.moveTo(cx+12,cy+12);ctx.lineTo(cx+5,cy+5);
     ctx.stroke();
   }
+
+  if(hurtTimer>0&&player.alive){
+    const alpha=Math.min(.78,hurtTimer*1.25);ctx.save();ctx.translate(w/2,h/2);ctx.rotate(hurtDirection-Math.PI/2);ctx.strokeStyle=`rgba(255,55,55,${alpha})`;ctx.lineWidth=7;ctx.beginPath();ctx.arc(0,0,58,-.34,.34);ctx.stroke();ctx.restore();
+  }
+  for(const c of casings){ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.r);ctx.fillStyle="#c8a25a";ctx.fillRect(-3,-1,6,2);ctx.restore()}
 
   const blueAlive=aliveCount(0), redAlive=aliveCount(1);
   ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
@@ -2235,9 +2367,9 @@ function renderWorld(){
         : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
   }
   const wp=WEAPONS[viewWeapon];
-  ui.ammo.textContent=spectating
-    ? `${wp.name} · SPECTATING`
-    : (viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`);
+  ui.ammo.textContent=spectating?`${wp.name} · SPECTATING`:(viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`);
+  const ri=$("reloadIndicator"),rf=$("reloadFill"),rl=$("reloadLabel");
+  if(ri){const show=!spectating&&reloading&&reloadWeaponIndex===player.weapon;ri.style.display=show?"block":"none";if(show){const total=Math.max(.01,reloadEndAt-reloadStartedAt),p=Math.max(0,Math.min(1,(gameTime-reloadStartedAt)/total));if(rf)rf.style.width=`${p*100}%`;if(rl)rl.textContent=`RELOADING · ${Math.max(0,Math.ceil((reloadEndAt-gameTime)*10)/10)}s`}}
   ui.kd.textContent=`K/D ${player.kills} / ${player.deaths}`;
   ui.aimState.textContent=`F1 AIM ${aimOn?"ON":"OFF"}`;
   ui.aimState.classList.toggle("cheatOn",aimOn);
@@ -2437,7 +2569,7 @@ const ONLINE_NAME_KEY="cheatArena.nickname.v1";
 const online={
   app:null,auth:null,db:null,user:null,mods:null,
   roomCode:null,room:null,roomUnsub:null,presence:null,
-  isHost:false,remoteByUid:new Map(),seenEvents:new Set(),
+  isHost:false,remoteByUid:new Map(),seenEvents:new Set(),seenKillFeed:new Set(),
   stateWritePending:false,pendingState:null,lastStateWrite:0,lastRoundToken:null,
   connectionLabel:"OFFLINE",hostTickAt:0,cleanupAt:0
 };
@@ -2578,7 +2710,7 @@ async function createOnlineRoom(){
         [online.user.uid]:{
           name,team:0,joinedAt:now,online:true,lastSeen:now,
           x:0,y:0,a:0,pitch:0,hp:100,alive:true,weapon:0,
-          jumpZ:0,crouched:false,kills:0,deaths:0,roundToken:0
+          jumpZ:0,crouched:false,shotSeq:0,kills:0,deaths:0,roundToken:0
         }
       }
     });
@@ -2614,7 +2746,7 @@ async function joinOnlineRoom(){
     await m.set(m.ref(online.db,`rooms/${code}/players/${online.user.uid}`),{
       name,team,joinedAt:now,online:true,lastSeen:now,
       x:0,y:0,a:0,pitch:0,hp:100,alive:true,weapon:0,
-      jumpZ:0,crouched:false,kills:0,deaths:0,roundToken:0
+      jumpZ:0,crouched:false,shotSeq:0,kills:0,deaths:0,roundToken:0
     });
     await enterOnlineRoom(code);
   }catch(err){
@@ -2628,6 +2760,7 @@ async function enterOnlineRoom(code){
   online.roomCode=code;
   online.lastRoundToken=null;
   online.seenEvents.clear();
+  online.seenKillFeed.clear();
   bots.length=0;
   online.remoteByUid.clear();
 
@@ -2672,7 +2805,7 @@ async function leaveOnlineRoom(){
   }catch(err){console.warn(err)}
   if(online.roomUnsub){online.roomUnsub();online.roomUnsub=null}
   online.roomCode=null;online.room=null;online.isHost=false;
-  online.lastRoundToken=null;online.remoteByUid.clear();online.seenEvents.clear();
+  online.lastRoundToken=null;online.remoteByUid.clear();online.seenEvents.clear();online.seenKillFeed.clear();
   onlineMode=false;online.connectionLabel=online.user?"CONNECTED":"OFFLINE";
   bots.length=0;rebuildAIBots();
   enterLobby();
@@ -2757,6 +2890,7 @@ function beginOnlineRound(room){
   online.lastRoundToken=meta.roundToken;
   syncRemotePlayers(room.players||{});
   syncOnlineState(true);
+  sfxRound();
   notify(`ONLINE ROUND ${roundNumber} · ${teamName(player.team)}`);
 }
 
@@ -2799,6 +2933,7 @@ function handleOnlineSnapshot(room){
 
   syncRemotePlayers(room.players||{});
   processOnlineEvents(room.events||{});
+  processOnlineKillFeed(room.killfeed||{});
 
   const meta=room.meta||{};
   blueRoundWins=Number(meta.blueWins)||0;
@@ -2851,7 +2986,7 @@ function syncRemotePlayers(players){
         pitch:Number(p.pitch)||0,tPitch:Number(p.pitch)||0,
         hp:Number(p.hp??100),alive:p.alive!==false,weapon:Number(p.weapon)||0,
         jumpZ:Number(p.jumpZ)||0,tJumpZ:Number(p.jumpZ)||0,
-        crouched:!!p.crouched,crouchBlend:p.crouched?1:0,nextShot:0
+        crouched:!!p.crouched,crouchBlend:p.crouched?1:0,nextShot:0,lastShotSeq:Number(p.shotSeq)||0
       };
       online.remoteByUid.set(uid,e);
       bots.push(e);
@@ -2861,6 +2996,11 @@ function syncRemotePlayers(players){
       e.tPitch=Number(p.pitch)||0;e.tJumpZ=Number(p.jumpZ)||0;
       e.hp=Number(p.hp??e.hp);e.alive=p.alive!==false;e.weapon=Number(p.weapon)||0;
       e.crouched=!!p.crouched;
+      const incomingShotSeq=Number(p.shotSeq)||0;
+      if(incomingShotSeq!==e.lastShotSeq){
+        if(e.alive)sfxWeapon(e.weapon,e);
+        e.lastShotSeq=incomingShotSeq;
+      }
       if(Math.hypot(e.tx-e.x,e.ty-e.y)>TILE*3){e.x=e.tx;e.y=e.ty}
     }
   }
@@ -2881,7 +3021,7 @@ function buildOnlineState(){
     name:cleanNickname(),team:player.team,
     x:Math.round(player.x*100)/100,y:Math.round(player.y*100)/100,
     a:player.a,pitch:cameraPitch,hp:Math.max(0,player.hp),alive:!!player.alive,
-    weapon:player.weapon,jumpZ:player.jumpZ,crouched:!!player.crouched,
+    weapon:player.weapon,jumpZ:player.jumpZ,crouched:!!player.crouched,shotSeq:localShotSeq,
     kills:player.kills,deaths:player.deaths,lastSeen:Date.now(),
     online:true,roundToken:token
   };
@@ -2938,29 +3078,32 @@ function processOnlineEvents(events){
 
     const sameRound=ev.roundToken===(online.room?.meta?.roundToken||0);
     if(sameRound && matchState===MATCH_STATE.PLAYING && player.alive && ev.type==="damage"){
-      applyIncomingOnlineDamage(Number(ev.damage)||0,ev.shooterUid);
+      applyIncomingOnlineDamage(Number(ev.damage)||0,ev.shooterUid,Number(ev.weapon)||0);
     }
     online.mods.remove(online.mods.ref(online.db,`rooms/${online.roomCode}/events/${id}`)).catch(()=>{});
   }
   if(online.seenEvents.size>500) online.seenEvents.clear();
 }
 
-function applyIncomingOnlineDamage(amount,shooterUid){
-  if(!player.alive || amount<=0) return;
-  player.hp=Math.max(0,player.hp-amount);
-  damageFlash=Math.min(1,damageFlash+.75);
-  spawnBlood(player);
+function applyIncomingOnlineDamage(amount,shooterUid,weaponIndex=0){
+  if(!player.alive||amount<=0)return;
+  player.hp=Math.max(0,player.hp-amount);const shooter=online.remoteByUid.get(shooterUid)||null;onPlayerHurt(amount,shooter);spawnBlood(player);
   if(player.hp<=0){
-    player.alive=false;player.deaths++;
-    player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;
-    ensureSpectateTarget();
-
-    if(shooterUid){
-      const killsRef=online.mods.ref(online.db,`rooms/${online.roomCode}/players/${shooterUid}/kills`);
-      online.mods.runTransaction(killsRef,v=>(Number(v)||0)+1).catch(()=>{});
-    }
+    player.alive=false;player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget();
+    if(shooterUid){const killsRef=online.mods.ref(online.db,`rooms/${online.roomCode}/players/${shooterUid}/kills`);online.mods.runTransaction(killsRef,v=>(Number(v)||0)+1).catch(()=>{});publishOnlineKillFeed(shooterUid,weaponIndex).catch(()=>{})}
   }
   syncOnlineState(true);
+}
+async function publishOnlineKillFeed(shooterUid,weaponIndex=0){
+  if(!online.roomCode||!online.user||!online.db)return;const shooter=onlinePlayerByUid(shooterUid),victim=onlinePlayerByUid(online.user.uid),m=online.mods,kref=m.push(m.ref(online.db,`rooms/${online.roomCode}/killfeed`));
+  await m.set(kref,{killerUid:shooterUid,victimUid:online.user.uid,killerName:shooter?.name||"PLAYER",victimName:victim?.name||cleanNickname(),killerTeam:Number(shooter?.team)||0,weapon:Number(weaponIndex)||0,createdAt:m.serverTimestamp()});
+}
+function processOnlineKillFeed(feed){
+  for(const [id,k] of Object.entries(feed||{})){if(!k||online.seenKillFeed.has(id))continue;online.seenKillFeed.add(id);const wi=Math.max(0,Math.min(WEAPONS.length-1,Number(k.weapon)||0)),selfKill=k.killerUid===online.user?.uid;
+    addKillFeed(k.killerName||"PLAYER",k.victimName||"PLAYER",WEAPONS[wi]?.name||"AR",Number(k.killerTeam)||0,selfKill);
+    if(selfKill){sfxKill();hitMarker=.18;hitMarkerKill=true;combatToast("ELIMINATION")}
+  }
+  if(online.seenKillFeed.size>300)online.seenKillFeed.clear();
 }
 
 async function finishOnlineRound(winnerTeam){
@@ -3032,6 +3175,11 @@ async function hostOnlineTick(){
         online.mods.remove(online.mods.ref(online.db,`rooms/${online.roomCode}/events/${id}`)).catch(()=>{});
       }
     }
+    for(const [id,k] of Object.entries(online.room.killfeed||{})){
+      if(typeof k?.createdAt==="number" && now-k.createdAt>12000){
+        online.mods.remove(online.mods.ref(online.db,`rooms/${online.roomCode}/killfeed/${id}`)).catch(()=>{});
+      }
+    }
   }
 }
 
@@ -3100,6 +3248,7 @@ function loop(now){
       updateBloodFx(dt);
     }
   }
+  updateCombatPolish(dt);
   onlineTick();
   renderWorld();
   requestAnimationFrame(loop);
