@@ -167,6 +167,23 @@ button{font:inherit}
   text-shadow:0 2px 6px #000;pointer-events:none
 }
 #deathNotice small{font-size:11px;opacity:.72;letter-spacing:.16em}
+
+#spectatorHud{
+  position:fixed;left:50%;bottom:calc(86px + var(--safeB));transform:translateX(-50%);
+  z-index:65;display:none;min-width:230px;text-align:center;padding:8px 12px;
+  border:1px solid rgba(255,255,255,.24);border-radius:8px;background:rgba(5,7,9,.78);
+  color:#fff;font:800 13px Arial;letter-spacing:.04em;pointer-events:none;
+}
+#movementState{
+  position:fixed;left:50%;bottom:calc(54px + var(--safeB));transform:translateX(-50%);
+  z-index:63;color:#d9d9d9;font:700 11px Arial;text-shadow:0 2px 4px #000;pointer-events:none
+}
+#jumpButton{right:calc(72px + var(--safeR));bottom:calc(92px + var(--safeB));width:64px;height:42px}
+#crouchButton{right:calc(16px + var(--safeR));bottom:calc(92px + var(--safeB));width:50px;height:42px;font-size:10px}
+@media(max-width:700px){
+  #spectatorHud{bottom:calc(174px + var(--safeB));font-size:11px;min-width:200px}
+  #movementState{bottom:calc(137px + var(--safeB));font-size:9px}
+}
 </style>
 </head>
 <body>
@@ -177,7 +194,9 @@ button{font:inherit}
   <div id="roundRule">FIRST TO 5</div>
 </div>
 <div id="damageOverlay"></div>
-<div id="deathNotice">ELIMINATED<br><small>WAIT FOR NEXT ROUND</small></div>
+<div id="deathNotice">ELIMINATED<br><small>SPECTATOR MODE</small></div>
+<div id="spectatorHud">SPECTATING</div>
+<div id="movementState" class="hidden">SPACE JUMP · CTRL/C CROUCH</div>
 
 
 <div id="healthBarWrap" class="hidden">
@@ -185,7 +204,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-05 2D REVERT</div>
+<div id="buildBadge">BUILD 2026-09-06 2D MOVEMENT + SPECTATOR</div>
 
 
 <canvas id="game"></canvas>
@@ -230,6 +249,8 @@ button{font:inherit}
   <button id="aimButton" class="touchButton">AIM</button>
   <button id="espButton" class="touchButton">ESP</button>
   <button id="noRecoilButton" class="touchButton">NO RECOIL</button>
+  <button id="jumpButton" class="touchButton">JUMP</button>
+  <button id="crouchButton" class="touchButton">CROUCH</button>
 </div>
 
 <div id="notice"></div>
@@ -257,6 +278,8 @@ const ui = {
   roundHud:$("roundHud"), healthBarWrap:$("healthBarWrap"),
   hp:$("hp"), ammo:$("ammo"), kd:$("kd"), aimState:$("aimState"), espState:$("espState"), recoilState:$("recoilState"),
   reload:$("reloadButton"), aim:$("aimButton"), esp:$("espButton"), noRecoil:$("noRecoilButton"),
+  jump:$("jumpButton"), crouch:$("crouchButton"),
+  spectatorHud:$("spectatorHud"), movementState:$("movementState"),
   notice:$("notice")
 };
 
@@ -404,7 +427,8 @@ const WEAPONS = [
 const player = {
   x:2.5*TILE, y:2.5*TILE, a:0,
   hp:100, team:0, weapon:0, ammo:[30,12,999,6,1,50],
-  nextShot:0, kills:0, deaths:0, alive:true
+  nextShot:0, kills:0, deaths:0, alive:true,
+  jumpZ:0, jumpVel:0, crouched:false
 };
 
 
@@ -462,6 +486,10 @@ let touchLookId = null;
 let touchLookX = 0;
 let touchLookY = 0;
 
+let spectateTarget = null;
+let spectateIndex = -1;
+let crouchTouch = false;
+
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.max(1, Math.floor(innerWidth*dpr));
@@ -515,6 +543,70 @@ function enemyList(team){
   return [player,...bots.filter(b=>b.team===0)].filter(e=>e.alive);
 }
 
+function aliveCount(team){
+  if(team===0) return (player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
+  return bots.filter(b=>b.team===1&&b.alive).length;
+}
+
+function spectatorCandidates(){
+  return bots.filter(b=>b.team===0 && b.alive);
+}
+
+function setSpectateTarget(target){
+  spectateTarget=target||null;
+  const candidates=spectatorCandidates();
+  spectateIndex=spectateTarget ? candidates.indexOf(spectateTarget) : -1;
+}
+
+function ensureSpectateTarget(){
+  if(player.alive){
+    setSpectateTarget(null);
+    return null;
+  }
+  const candidates=spectatorCandidates();
+  if(!candidates.length){
+    setSpectateTarget(null);
+    return null;
+  }
+  if(!spectateTarget || !spectateTarget.alive || spectateTarget.team!==0){
+    setSpectateTarget(candidates[0]);
+  }
+  return spectateTarget;
+}
+
+function cycleSpectator(){
+  if(player.alive || matchState!==MATCH_STATE.PLAYING) return;
+  const candidates=spectatorCandidates();
+  if(!candidates.length){
+    setSpectateTarget(null);
+    return;
+  }
+  let i=spectateTarget ? candidates.indexOf(spectateTarget) : -1;
+  i=(i+1)%candidates.length;
+  setSpectateTarget(candidates[i]);
+  notify(`SPECTATING ${spectateTarget.name}`);
+}
+
+function viewActor(){
+  if(player.alive) return player;
+  return ensureSpectateTarget() || player;
+}
+
+function tryJump(){
+  if(!player.alive || matchState!==MATCH_STATE.PLAYING) return;
+  if(player.crouched || player.jumpZ>0.5) return;
+  player.jumpVel=230;
+}
+
+function setCrouch(on){
+  if(!player.alive || matchState!==MATCH_STATE.PLAYING){
+    player.crouched=false;
+    return;
+  }
+  player.crouched=!!on && player.jumpZ<1;
+  ui.crouch?.classList.toggle("on",player.crouched);
+}
+
 function spawnEntity(e){
   let p;
   if(e===player){
@@ -537,7 +629,14 @@ function killEntity(victim,killer){
   const team = killer===player ? 0 : killer.team;
   if(team===0) scoreB++; else scoreR++;
   if(killer===player) player.kills++;
-  if(victim===player) player.deaths++;
+  if(victim===player){
+    player.deaths++;
+    player.crouched=false;
+    player.jumpZ=0;
+    player.jumpVel=0;
+    firing=false;
+    ensureSpectateTarget();
+  }
 
   checkRoundEnd();
 }
@@ -582,6 +681,7 @@ function setMatchUi(inMatch){
   ui.crosshair.classList.toggle("hidden",!inMatch);
   ui.roundHud.classList.toggle("hidden",!inMatch);
   ui.healthBarWrap.classList.toggle("hidden",!inMatch);
+  ui.movementState?.classList.toggle("hidden",!inMatch);
   if(TOUCH) ui.touchUI.classList.toggle("hidden",!inMatch);
   else ui.touchUI.classList.add("hidden");
 }
@@ -617,6 +717,13 @@ function enterLobby(){
   if(dmg) dmg.style.opacity="0";
 
   damageFlash=0;
+  setSpectateTarget(null);
+  player.jumpZ=0;
+  player.jumpVel=0;
+  player.crouched=false;
+  crouchTouch=false;
+  ui.crouch?.classList.remove("on");
+  if(ui.spectatorHud) ui.spectatorHud.style.display="none";
   recoilPitch=0;
   recoilKick=0;
   recoilSide=0;
@@ -642,6 +749,12 @@ function beginNextRound(){
   player.a=0;
   player.ammo=[30,12,999,6,1,50];
   player.nextShot=0;
+  player.jumpZ=0;
+  player.jumpVel=0;
+  player.crouched=false;
+  crouchTouch=false;
+  setSpectateTarget(null);
+  ui.crouch?.classList.remove("on");
 
   let bi=0,ri=0;
   for(const b of bots){
@@ -895,6 +1008,25 @@ ui.online.addEventListener("click",()=>notify("ONLINE은 Firebase 연동 경로 
 
 function updatePlayer(dt){
   if(!player.alive) return;
+
+  // Flat raycaster world: jump/crouch changes camera height and movement feel.
+  // There is no vertical wall collision yet.
+  if(!TOUCH){
+    const crouchHeld=!!(keys["control"] || keys["c"]);
+    setCrouch(crouchHeld);
+  }else{
+    setCrouch(crouchTouch);
+  }
+
+  if(player.jumpZ>0 || player.jumpVel>0){
+    player.jumpZ += player.jumpVel*dt;
+    player.jumpVel -= 520*dt;
+    if(player.jumpZ<=0){
+      player.jumpZ=0;
+      player.jumpVel=0;
+    }
+  }
+
   let f=0,s=0;
   if(TOUCH){
     f=-moveJoy.y;
@@ -920,7 +1052,7 @@ function updatePlayer(dt){
 
   const l=Math.hypot(f,s);
   if(l>1){f/=l;s/=l;}
-  const speed=150;
+  const speed=player.crouched?86:150;
   const dx=(Math.cos(player.a)*f+Math.cos(player.a+Math.PI/2)*s)*speed*dt;
   const dy=(Math.sin(player.a)*f+Math.sin(player.a+Math.PI/2)*s)*speed*dt;
   moveEnt(player,dx,dy);
@@ -1239,8 +1371,11 @@ function drawSoldierModel(e,sx,baseY,sz){
 
 function renderWorld(){
   const w=innerWidth,h=innerHeight;
-
-  const horizon = h/2 + recoilPitch*h*1.9;
+  const cam=viewActor();
+  const spectating=!player.alive && cam!==player;
+  const camRecoil=spectating?0:recoilPitch;
+  const verticalLift=spectating?0:(player.jumpZ*.18-(player.crouched?22:0));
+  const horizon = h/2 + camRecoil*h*1.9 + verticalLift;
 
   const sky=ctx.createLinearGradient(0,0,0,horizon);
   sky.addColorStop(0,"#33414d");
@@ -1266,13 +1401,13 @@ function renderWorld(){
 
   const step = w > 900 ? 2 : 3;
   for(let x=0;x<w;x+=step){
-    const ra=player.a-FOV/2+(x/w)*FOV;
+    const ra=cam.a-FOV/2+(x/w)*FOV;
     let d=2;
     while(d<1400){
-      if(wall(player.x+Math.cos(ra)*d,player.y+Math.sin(ra)*d)) break;
+      if(wall(cam.x+Math.cos(ra)*d,cam.y+Math.sin(ra)*d)) break;
       d+=5;
     }
-    d*=Math.cos(ra-player.a);
+    d*=Math.cos(ra-cam.a);
     const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const shade=Math.max(35,185-d*.11)|0;
     ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
@@ -1285,15 +1420,15 @@ function renderWorld(){
     ctx.fillRect(x,horizon-wh/2+wh*.49,step+1,2);
   }
 
-  const entities=bots.filter(b=>b.alive).sort((a,b)=>dist(player,b)-dist(player,a));
+  const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
   for(const e of entities){
-    const d=dist(player,e);
-    const da=norm(angle(player,e)-player.a);
+    const d=dist(cam,e);
+    const da=norm(angle(cam,e)-cam.a);
     if(Math.abs(da)>FOV*.68) continue;
     const sx=w/2+(da/FOV)*w;
     const sz=Math.min(h*.72,17000/Math.max(d,1));
 
-    if(los(player,e)){
+    if(los(cam,e)){
       const baseY=horizon+sz*.45;
       drawSoldierModel(e,sx,baseY,sz);
 
@@ -1322,9 +1457,9 @@ function renderWorld(){
 
   // blood hit particles on characters
   for(const p of bloodFx){
-    const dx=p.x-player.x,dy=p.y-player.y,d=Math.hypot(dx,dy);
+    const dx=p.x-cam.x,dy=p.y-cam.y,d=Math.hypot(dx,dy);
     if(d<7) continue;
-    const da=norm(Math.atan2(dy,dx)-player.a);
+    const da=norm(Math.atan2(dy,dx)-cam.a);
     if(Math.abs(da)<FOV*.58){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon-(Math.min(1800/d,80)*.35);
@@ -1336,9 +1471,9 @@ function renderWorld(){
 
   // crossbow bolts / impact sparks in world
   for(const b of bolts){
-    const dx=b.x-player.x, dy=b.y-player.y;
+    const dx=b.x-cam.x, dy=b.y-cam.y;
     const d=Math.hypot(dx,dy);
-    const da=norm(Math.atan2(dy,dx)-player.a);
+    const da=norm(Math.atan2(dy,dx)-cam.a);
     if(Math.abs(da)<FOV*.58 && d>8){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon;
@@ -1354,8 +1489,8 @@ function renderWorld(){
     }
   }
   for(const s of impacts){
-    const dx=s.x-player.x,dy=s.y-player.y,d=Math.hypot(dx,dy);
-    const da=norm(Math.atan2(dy,dx)-player.a);
+    const dx=s.x-cam.x,dy=s.y-cam.y,d=Math.hypot(dx,dy);
+    const da=norm(Math.atan2(dy,dx)-cam.a);
     if(Math.abs(da)<FOV*.58&&d>6){
       const sx=w/2+(da/(FOV/2))*w/2;
       const sy=horizon;
@@ -1367,8 +1502,9 @@ function renderWorld(){
   }
 
   // first-person weapon view models: detailed shapes that still converge on the crosshair
-  const kickY = recoilKick*34;
-  const kickX = recoilSide*w*1.7;
+  const viewWeapon=spectating?0:player.weapon;
+  const kickY = spectating?0:recoilKick*34;
+  const kickX = spectating?0:recoilSide*w*1.7;
   const cx=w/2, cy=h/2;
 
   ctx.save();
@@ -1411,7 +1547,7 @@ function renderWorld(){
     ctx.restore();
   };
 
-  if(player.weapon===0){
+  if(viewWeapon===0){
     // AR
     muzzleX=cx+w*.018; muzzleY=cy+h*.102;
 
@@ -1434,7 +1570,7 @@ function renderWorld(){
     drawForearm(w*.638,h*.868,w*.034,h*.041,-.35);
     drawForearm(w*.744,h*.935,w*.045,h*.055,-.18);
 
-  }else if(player.weapon===1){
+  }else if(viewWeapon===1){
     // Pistol
     muzzleX=cx+w*.010; muzzleY=cy+h*.088;
 
@@ -1452,7 +1588,7 @@ function renderWorld(){
 
     drawForearm(w*.640,h*.946,w*.041,h*.051,-.18);
 
-  }else if(player.weapon===2){
+  }else if(viewWeapon===2){
     // Knife
     const tipX=cx+w*.012, tipY=cy+h*.028;
 
@@ -1463,7 +1599,7 @@ function renderWorld(){
     for(let i=0;i<5;i++) seg(w*(.618+i*.009),h*(.844+i*.020),w*(.649+i*.008),h*(.851+i*.020),2,"#585d5f");
     drawForearm(w*.657,h*.931,w*.042,h*.052,-.24);
 
-  }else if(player.weapon===3){
+  }else if(viewWeapon===3){
     // Shotgun
     muzzleX=cx+w*.020; muzzleY=cy+h*.093;
 
@@ -1482,7 +1618,7 @@ function renderWorld(){
 
     drawForearm(w*.636,h*.884,w*.042,h*.046,-.28);
 
-  }else if(player.weapon===4){
+  }else if(viewWeapon===4){
     // Crossbow
     const tipX=cx+w*.010, tipY=cy+h*.060;
 
@@ -1537,7 +1673,7 @@ function renderWorld(){
     drawForearm(w*.732,h*.930,w*.046,h*.056,-.18);
   }
 
-  if(muzzleFlash>0 && player.weapon!==2 && player.weapon!==4){
+  if(muzzleFlash>0 && viewWeapon!==2 && viewWeapon!==4){
     const f=8+Math.random()*12;
     ctx.fillStyle="rgba(255,226,125,.95)";
     ctx.beginPath();
@@ -1563,16 +1699,35 @@ function renderWorld(){
     ctx.stroke();
   }
 
-  ui.topInfo.textContent=`BLUE ${scoreB} : ${scoreR} RED · ${MAPS[currentMapIndex].name}`;
+  const blueAlive=aliveCount(0), redAlive=aliveCount(1);
+  ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
   ui.hp.textContent=`HEALTH ${Math.max(0,player.hp)}`;
   const hbFill=document.getElementById("healthBarFill");
   const hbValue=document.getElementById("healthBarValue");
   if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,player.hp))}%`;
   if(hbValue) hbValue.textContent=Math.max(0,Math.ceil(player.hp));
   const dn=document.getElementById("deathNotice");
-  if(dn) dn.style.display=(!player.alive && !roundOver)?"block":"none";
+  const inSpectator=!player.alive && !roundOver;
+  if(dn) dn.style.display=inSpectator?"block":"none";
+  const st=ui.spectatorHud;
+  if(st){
+    if(inSpectator){
+      const target=ensureSpectateTarget();
+      st.style.display="block";
+      st.textContent=target
+        ? `SPECTATING ${target.name} · TAP / CLICK = NEXT · BLUE ${blueAlive} / RED ${redAlive}`
+        : `TEAM ELIMINATED · BLUE 0 / RED ${redAlive}`;
+    }else st.style.display="none";
+  }
+  if(ui.movementState){
+    ui.movementState.textContent=player.crouched
+      ? "CROUCHING"
+      : player.jumpZ>0
+        ? "JUMPING"
+        : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
+  }
   const wp=WEAPONS[player.weapon];
-  ui.ammo.textContent=player.weapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`;
+  ui.ammo.textContent=viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`;
   ui.kd.textContent=`K/D ${player.kills} / ${player.deaths}`;
   ui.aimState.textContent=`F1 AIM ${aimOn?"ON":"OFF"}`;
   ui.aimState.classList.toggle("cheatOn",aimOn);
@@ -1613,6 +1768,14 @@ if(TOUCH){
 
   canvas.addEventListener("pointerdown",e=>{
     if(!running || e.clientX < innerWidth*.30) return;
+    if(!player.alive){
+      touchLookId=e.pointerId;
+      touchStartX=e.clientX; touchStartY=e.clientY;
+      touchStartTime=performance.now(); touchDragged=false;
+      canvas.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+      return;
+    }
     touchLookId=e.pointerId;
     touchLookX=e.clientX; touchLookY=e.clientY;
     touchStartX=e.clientX; touchStartY=e.clientY;
@@ -1632,6 +1795,11 @@ if(TOUCH){
 
   canvas.addEventListener("pointermove",e=>{
     if(e.pointerId!==touchLookId) return;
+    if(!player.alive){
+      if(Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY)>8) touchDragged=true;
+      e.preventDefault();
+      return;
+    }
     const dx=e.clientX-touchLookX;
     const dy=e.clientY-touchLookY;
     touchLookX=e.clientX; touchLookY=e.clientY;
@@ -1651,6 +1819,15 @@ if(TOUCH){
     const elapsed=performance.now()-touchStartTime;
     const moved=Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY);
     const wasAuto=!!WEAPONS[player.weapon]?.auto;
+
+    // Spectator: a short tap switches to the next living teammate.
+    if(!player.alive){
+      firing=false;
+      if(!touchDragged && moved<12 && elapsed<450) cycleSpectator();
+      touchLookId=null;
+      e.preventDefault();
+      return;
+    }
 
     // Stop full-auto when the finger leaves the screen.
     firing=false;
@@ -1691,6 +1868,11 @@ addEventListener("keydown",e=>{
   keys[e.key.toLowerCase()]=true;
   if(["1","2","3","4","5","6"].includes(e.key))selectWeapon(Number(e.key)-1);
   if(e.key.toLowerCase()==="r")reload();
+  if(e.code==="Space"){
+    e.preventDefault();
+    if(player.alive) tryJump();
+    else cycleSpectator();
+  }
   if(e.key==="F1"){e.preventDefault();toggleAim();}
   if(e.key==="F2"){e.preventDefault();toggleEsp();}
   if(e.key==="F3"){e.preventDefault();toggleNoRecoil();}
@@ -1698,18 +1880,33 @@ addEventListener("keydown",e=>{
 addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false});
 
 if(!TOUCH){
-  canvas.addEventListener("click",()=>{if(running)canvas.requestPointerLock?.()});
+  canvas.addEventListener("click",()=>{
+    if(!running) return;
+    if(!player.alive){ cycleSpectator(); return; }
+    canvas.requestPointerLock?.();
+  });
   addEventListener("mousemove",e=>{
-    if(document.pointerLockElement===canvas && !aimOn){
+    if(document.pointerLockElement===canvas && player.alive && !aimOn){
       player.a += e.movementX*.0027;
       recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + e.movementY*.00018));
     }
   });
-  addEventListener("mousedown",e=>{if(e.button===0&&running)firing=true});
+  addEventListener("mousedown",e=>{if(e.button===0&&running&&player.alive)firing=true});
   addEventListener("mouseup",e=>{if(e.button===0)firing=false});
 }
 
 ui.reload.addEventListener("click",reload);
+ui.jump?.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  if(player.alive) tryJump();
+  else cycleSpectator();
+});
+ui.crouch?.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  if(!player.alive) return;
+  crouchTouch=!crouchTouch;
+  setCrouch(crouchTouch);
+});
 ui.aim.addEventListener("click",toggleAim);
 ui.esp.addEventListener("click",toggleEsp);
 ui.noRecoil?.addEventListener("click",toggleNoRecoil);
@@ -1726,6 +1923,7 @@ function loop(now){
     }
 
     if(matchState===MATCH_STATE.PLAYING){
+      if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
       updateProjectiles(dt);
