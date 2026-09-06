@@ -184,6 +184,52 @@ button{font:inherit}
   #spectatorHud{bottom:calc(174px + var(--safeB));font-size:11px;min-width:200px}
   #movementState{bottom:calc(137px + var(--safeB));font-size:9px}
 }
+
+#onlineOverlay{
+  position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;
+  padding:calc(14px + var(--safeT)) calc(14px + var(--safeR)) calc(14px + var(--safeB)) calc(14px + var(--safeL));
+  background:rgba(4,6,8,.91);overflow:auto;touch-action:pan-y
+}
+#onlineOverlay.show{display:flex}
+#onlineCard{
+  width:min(560px,96vw);max-height:94vh;overflow:auto;padding:18px;
+  border:1px solid #8c6335;background:#11161beF;color:#eee;border-radius:12px;
+  box-shadow:0 18px 60px #000c
+}
+#onlineCard h2{margin:0 0 8px;color:var(--amber2);font-size:24px}
+#onlineCard h3{margin:16px 0 8px;font-size:14px;color:#ddd}
+.onlineGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.onlineInput,.onlineText{
+  width:100%;border:1px solid #555;background:#090c0f;color:#eee;border-radius:7px;padding:10px;font:13px monospace
+}
+.onlineText{min-height:118px;resize:vertical;user-select:text;-webkit-user-select:text}
+.onlineBtn{
+  min-height:43px;border:1px solid #76542e;border-radius:7px;background:#262b30;color:#eee;font-weight:800
+}
+.onlineBtn.primary{background:#543a20;color:#ffd38f;border-color:#c18440}
+.onlineBtn.danger{border-color:#884646;background:#351c1c}
+#onlineStatus{margin:10px 0;padding:9px;border-radius:7px;background:#090c0f;color:#aeb8c0;font:12px monospace;white-space:pre-wrap}
+#onlinePlayers{margin-top:8px;display:grid;gap:5px}
+.onlinePlayer{
+  display:grid;grid-template-columns:72px 1fr 72px;gap:7px;align-items:center;
+  padding:8px;border:1px solid #343a40;background:#0c1014;border-radius:7px;font-size:12px
+}
+.onlinePlayer .blue{color:#78c9ff;font-weight:900}
+.onlinePlayer .red{color:#ff8585;font-weight:900}
+.onlineTiny{font-size:11px;color:#9099a1;line-height:1.45}
+#onlineRoomCode{font:900 24px monospace;letter-spacing:.12em;color:#ffd38f}
+#onlineConfigPanel{margin-top:12px;padding-top:12px;border-top:1px solid #343a40}
+#onlineMatchBanner{
+  position:fixed;left:50%;top:calc(120px + var(--safeT));transform:translateX(-50%);
+  z-index:66;display:none;padding:7px 10px;border:1px solid rgba(255,255,255,.18);
+  border-radius:7px;background:rgba(5,7,9,.72);color:#fff;font:800 11px monospace;pointer-events:none
+}
+@media(max-width:700px){
+  #onlineCard{padding:14px}
+  .onlineGrid{grid-template-columns:1fr}
+  #onlineMatchBanner{top:calc(112px + var(--safeT));font-size:9px}
+}
+
 </style>
 </head>
 <body>
@@ -204,7 +250,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-06 VERTICAL FREELOOK</div>
+<div id="buildBadge">BUILD 2026-09-06 PATHFINDING AI</div>
 
 
 <canvas id="game"></canvas>
@@ -214,7 +260,7 @@ button{font:inherit}
   <p>5 VS 5 AI FPS · 6 WEAPONS · MAC + NO RECOIL</p>
   
   <button id="startAI" class="menuButton primary">AI 5v5 시작</button>
-  <button id="online" class="menuButton">온라인 라운드전 (준비 중)</button>
+  <button id="online" class="menuButton">ONLINE 5v5 (Firebase)</button>
   <p id="serverText">GitHub Pages 클라이언트 · ONLINE = Firebase</p>
 </div>
 
@@ -252,6 +298,59 @@ button{font:inherit}
   <button id="jumpButton" class="touchButton">JUMP</button>
   <button id="crouchButton" class="touchButton">CROUCH</button>
 </div>
+
+
+<div id="onlineOverlay">
+  <div id="onlineCard">
+    <h2>CHEAT ARENA ONLINE</h2>
+    <div class="onlineTiny">Firebase Realtime Database · 최대 10명 · BLUE 5 vs RED 5 · 2명부터 테스트 시작 가능</div>
+
+    <div id="onlineHome">
+      <h3>접속</h3>
+      <input id="onlineNickname" class="onlineInput" maxlength="12" placeholder="닉네임" value="PLAYER">
+      <div class="onlineGrid" style="margin-top:8px">
+        <button id="createOnlineRoom" class="onlineBtn primary">방 만들기</button>
+        <div style="display:grid;grid-template-columns:1fr 90px;gap:6px">
+          <input id="joinOnlineCode" class="onlineInput" maxlength="6" placeholder="방 코드">
+          <button id="joinOnlineRoom" class="onlineBtn">참가</button>
+        </div>
+      </div>
+      <button id="closeOnline" class="onlineBtn" style="width:100%;margin-top:8px">메인 메뉴</button>
+
+      <div id="onlineConfigPanel">
+        <h3>Firebase 설정</h3>
+        <div class="onlineTiny">처음 한 번만 Firebase Console의 웹 앱 <b>firebaseConfig</b>를 붙여넣으면 브라우저에 저장된다. 서비스 계정/private key는 넣지 말 것.</div>
+        <textarea id="firebaseConfigInput" class="onlineText" spellcheck="false" placeholder='const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  databaseURL: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};'></textarea>
+        <div class="onlineGrid" style="margin-top:7px">
+          <button id="saveFirebaseConfig" class="onlineBtn">Firebase 설정 저장</button>
+          <button id="clearFirebaseConfig" class="onlineBtn danger">설정 지우기</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="onlineRoom" class="hidden">
+      <div class="onlineTiny">ROOM CODE</div>
+      <div id="onlineRoomCode">------</div>
+      <div id="onlineRoomMeta" class="onlineTiny" style="margin:6px 0 10px"></div>
+      <div id="onlinePlayers"></div>
+      <div class="onlineGrid" style="margin-top:10px">
+        <button id="startOnlineMatch" class="onlineBtn primary">호스트: 경기 시작</button>
+        <button id="leaveOnlineRoom" class="onlineBtn danger">방 나가기</button>
+      </div>
+    </div>
+
+    <div id="onlineStatus">Firebase 설정을 확인하는 중...</div>
+  </div>
+</div>
+<div id="onlineMatchBanner"></div>
 
 <div id="notice"></div>
 <div id="errorBox" class="hidden"></div>
@@ -432,22 +531,39 @@ const player = {
 };
 
 
+const BOT_RADIUS=10;
+const BOT_SPEED=88;
+const BOT_REPATH_MIN=.22;
+const BOT_REPATH_MAX=.42;
+
 function botAt(pos, team, name){
-  return {x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true,strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI};
+  return {
+    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true,
+    strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI,
+    path:[],pathIndex:0,repath:0,targetUid:null,targetCell:"",
+    stuckFor:0,lastX:pos[0]*TILE,lastY:pos[1]*TILE,
+    avoidSide:Math.random()<.5?-1:1
+  };
 }
-const bots = [
-  botAt(blueSpawn[0],0,"BLUE-2"),
-  botAt(blueSpawn[1],0,"BLUE-3"),
-  botAt(blueSpawn[2],0,"BLUE-4"),
-  botAt(blueSpawn[3],0,"BLUE-5"),
-  botAt(redSpawn[0],1,"RED-1"),
-  botAt(redSpawn[1],1,"RED-2"),
-  botAt(redSpawn[2],1,"RED-3"),
-  botAt(redSpawn[3],1,"RED-4"),
-  botAt(redSpawn[4],1,"RED-5")
-];
+const bots = [];
+function rebuildAIBots(){
+  bots.length=0;
+  bots.push(
+    botAt(blueSpawn[0],0,"BLUE-2"),
+    botAt(blueSpawn[1],0,"BLUE-3"),
+    botAt(blueSpawn[2],0,"BLUE-4"),
+    botAt(blueSpawn[3],0,"BLUE-5"),
+    botAt(redSpawn[0],1,"RED-1"),
+    botAt(redSpawn[1],1,"RED-2"),
+    botAt(redSpawn[2],1,"RED-3"),
+    botAt(redSpawn[3],1,"RED-4"),
+    botAt(redSpawn[4],1,"RED-5")
+  );
+}
+rebuildAIBots();
 
 let running = false;
+let onlineMode = false;
 let aimOn = false;
 let espOn = false;
 let noRecoil = false;
@@ -531,6 +647,152 @@ function moveEnt(e,dx,dy){
   if(!wall(e.x,e.y+dy+Math.sign(dy)*r)) e.y += dy;
 }
 
+function tileWall(gx,gy){
+  if(gy<0||gx<0||gy>=MAP.length||gx>=MAP[0].length) return true;
+  return MAP[gy][gx]==="#";
+}
+
+function circleHitsWall(x,y,r=BOT_RADIUS){
+  const minGX=Math.floor((x-r)/TILE), maxGX=Math.floor((x+r)/TILE);
+  const minGY=Math.floor((y-r)/TILE), maxGY=Math.floor((y+r)/TILE);
+  for(let gy=minGY;gy<=maxGY;gy++){
+    for(let gx=minGX;gx<=maxGX;gx++){
+      if(!tileWall(gx,gy)) continue;
+      const left=gx*TILE, top=gy*TILE, right=left+TILE, bottom=top+TILE;
+      const nx=Math.max(left,Math.min(x,right));
+      const ny=Math.max(top,Math.min(y,bottom));
+      const dx=x-nx,dy=y-ny;
+      if(dx*dx+dy*dy<r*r) return true;
+    }
+  }
+  return false;
+}
+
+function botSegmentClear(x1,y1,x2,y2,r=BOT_RADIUS){
+  const d=Math.hypot(x2-x1,y2-y1);
+  const steps=Math.max(1,Math.ceil(d/8));
+  for(let i=1;i<=steps;i++){
+    const t=i/steps;
+    if(circleHitsWall(x1+(x2-x1)*t,y1+(y2-y1)*t,r)) return false;
+  }
+  return true;
+}
+
+function botCellCenter(gx,gy){
+  return {x:(gx+.5)*TILE,y:(gy+.5)*TILE,gx,gy};
+}
+
+function botCellOpen(gx,gy){
+  if(tileWall(gx,gy)) return false;
+  const c=botCellCenter(gx,gy);
+  return !circleHitsWall(c.x,c.y,BOT_RADIUS);
+}
+
+function botPathfind(sx,sy,tx,ty){
+  const startGX=Math.floor(sx/TILE), startGY=Math.floor(sy/TILE);
+  const goalGX=Math.floor(tx/TILE), goalGY=Math.floor(ty/TILE);
+  if(!botCellOpen(startGX,startGY)||!botCellOpen(goalGX,goalGY)) return [];
+
+  const key=(x,y)=>`${x},${y}`;
+  const q=[[startGX,startGY]];
+  const came=new Map();
+  came.set(key(startGX,startGY),null);
+
+  // 8-way movement, but diagonal corner cutting is forbidden.
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  let found=false;
+  for(let qi=0;qi<q.length;qi++){
+    const [cx,cy]=q[qi];
+    if(cx===goalGX&&cy===goalGY){found=true;break}
+    for(const [dx,dy] of dirs){
+      const nx=cx+dx,ny=cy+dy,nk=key(nx,ny);
+      if(came.has(nk)||!botCellOpen(nx,ny)) continue;
+      if(dx&&dy && (!botCellOpen(cx+dx,cy)||!botCellOpen(cx,cy+dy))) continue;
+      came.set(nk,[cx,cy]);
+      q.push([nx,ny]);
+    }
+  }
+  if(!found) return [];
+
+  const cells=[];
+  let cur=[goalGX,goalGY];
+  while(cur){
+    cells.push(cur);
+    cur=came.get(key(cur[0],cur[1]));
+  }
+  cells.reverse();
+
+  // Convert to centers, then remove unnecessary corners only when the
+  // bot's full collision circle can safely travel along the shortcut.
+  const raw=cells.slice(1).map(([gx,gy])=>botCellCenter(gx,gy));
+  if(!raw.length) return [];
+  const smooth=[];
+  let ax=sx,ay=sy,i=0;
+  while(i<raw.length){
+    let best=i;
+    for(let j=raw.length-1;j>=i;j--){
+      if(botSegmentClear(ax,ay,raw[j].x,raw[j].y,BOT_RADIUS)){
+        best=j;break;
+      }
+    }
+    smooth.push(raw[best]);
+    ax=raw[best].x;ay=raw[best].y;
+    i=best+1;
+  }
+  return smooth;
+}
+
+function moveBotSafe(e,dx,dy){
+  // Micro-steps guarantee that a low frame rate can never tunnel/teleport
+  // through a wall. Axis separation also lets the bot slide along walls.
+  const total=Math.hypot(dx,dy);
+  if(total<=0) return 0;
+  const steps=Math.max(1,Math.ceil(total/4));
+  const sx=dx/steps,sy=dy/steps;
+  const ox=e.x,oy=e.y;
+
+  for(let i=0;i<steps;i++){
+    if(!circleHitsWall(e.x+sx,e.y,BOT_RADIUS)) e.x+=sx;
+    if(!circleHitsWall(e.x,e.y+sy,BOT_RADIUS)) e.y+=sy;
+  }
+  return Math.hypot(e.x-ox,e.y-oy);
+}
+
+function botSeparation(b){
+  let x=0,y=0;
+  for(const other of bots){
+    if(other===b||!other.alive||other.remote) continue;
+    const dx=b.x-other.x,dy=b.y-other.y;
+    const d=Math.hypot(dx,dy);
+    if(d>0&&d<34){
+      const f=(34-d)/34;
+      x+=dx/d*f;y+=dy/d*f;
+    }
+  }
+  // Also avoid standing directly inside the human player.
+  if(player.alive){
+    const dx=b.x-player.x,dy=b.y-player.y,d=Math.hypot(dx,dy);
+    if(d>0&&d<34){
+      const f=(34-d)/34;
+      x+=dx/d*f;y+=dy/d*f;
+    }
+  }
+  return {x,y};
+}
+
+function resetBotNavigation(b){
+  if(!b||b.remote) return;
+  b.path=[];
+  b.pathIndex=0;
+  b.repath=0;
+  b.targetUid=null;
+  b.targetCell="";
+  b.stuckFor=0;
+  b.lastX=b.x;
+  b.lastY=b.y;
+  b.avoidSide=Math.random()<.5?-1:1;
+}
+
 function los(a,b){
   const d = dist(a,b);
   for(let i=10;i<d;i+=10){
@@ -540,18 +802,17 @@ function los(a,b){
   return true;
 }
 
+function allEntities(){
+  return [player,...bots];
+}
 function enemyList(team){
-  if(team===0) return bots.filter(b=>b.team===1 && b.alive);
-  return [player,...bots.filter(b=>b.team===0)].filter(e=>e.alive);
+  return allEntities().filter(e=>e.alive && e.team!==team);
 }
-
 function aliveCount(team){
-  if(team===0) return (player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
-  return bots.filter(b=>b.team===1&&b.alive).length;
+  return allEntities().filter(e=>e.alive && e.team===team).length;
 }
-
 function spectatorCandidates(){
-  return bots.filter(b=>b.team===0 && b.alive);
+  return bots.filter(b=>b.team===player.team && b.alive);
 }
 
 function setSpectateTarget(target){
@@ -570,7 +831,7 @@ function ensureSpectateTarget(){
     setSpectateTarget(null);
     return null;
   }
-  if(!spectateTarget || !spectateTarget.alive || spectateTarget.team!==0){
+  if(!spectateTarget || !spectateTarget.alive || spectateTarget.team!==player.team){
     setSpectateTarget(candidates[0]);
   }
   return spectateTarget;
@@ -623,13 +884,28 @@ function spawnEntity(e){
   e.hp=100;
   e.alive=true;
   if(e===player) player.ammo=[30,12,999,6,1,50];
+  else resetBotNavigation(e);
 }
 
 function killEntity(victim,killer){
   if(!victim.alive) return;
   victim.alive=false;
   victim.hp=0;
-  const team = killer===player ? 0 : killer.team;
+
+  if(onlineMode){
+    if(victim===player){
+      player.deaths++;
+      player.crouched=false;
+      player.jumpZ=0;
+      player.jumpVel=0;
+      firing=false;
+      ensureSpectateTarget();
+      syncOnlineState(true);
+    }
+    return;
+  }
+
+  const team = killer===player ? player.team : killer.team;
   if(team===0) scoreB++; else scoreR++;
   if(killer===player) player.kills++;
   if(victim===player){
@@ -640,7 +916,6 @@ function killEntity(victim,killer){
     firing=false;
     ensureSpectateTarget();
   }
-
   checkRoundEnd();
 }
 
@@ -663,6 +938,7 @@ function resetEntityForRound(e, spawn){
   e.x=spawn[0]*TILE;
   e.y=spawn[1]*TILE;
   e.nextShot=0;
+  if(e!==player) resetBotNavigation(e);
 }
 
 function updateRoundHud(){
@@ -787,6 +1063,8 @@ function beginNextRound(){
 }
 
 function startMatch(){
+  onlineMode=false;
+  rebuildAIBots();
   currentMapIndex=Math.floor(Math.random()*MAPS.length);
   applyMap(currentMapIndex);
   resetMatchScore();
@@ -830,6 +1108,7 @@ function finishRound(winnerTeam){
 }
 
 function checkRoundEnd(){
+  if(onlineMode) return;
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
 
   const blueAlive=(player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
@@ -841,6 +1120,17 @@ function checkRoundEnd(){
 
 function damageTarget(target,amount,shooter){
   if(!target || !target.alive) return;
+
+  // In Firebase multiplayer each client owns its own HP.
+  // The shooter sends a damage event; the victim applies it locally.
+  if(onlineMode && shooter===player && target.remote){
+    spawnBlood(target);
+    hitMarker=.12;
+    target.hp=Math.max(0,target.hp-amount); // visual prediction until Firebase snapshot arrives
+    sendOnlineDamage(target.uid,amount,player.weapon);
+    return;
+  }
+
   target.hp-=amount;
   spawnBlood(target);
   if(shooter===player) hitMarker=.12;
@@ -853,7 +1143,7 @@ function damageTarget(target,amount,shooter){
 function bestTargetInCone(shooter,range,spread,angleOffset=0){
   let best=null,bestScore=Infinity;
   const baseA=shooter.a+angleOffset;
-  for(const t of enemyList(shooter===player?0:shooter.team)){
+  for(const t of enemyList(shooter===player?player.team:shooter.team)){
     const d=dist(shooter,t);
     if(d>range || !los(shooter,t)) continue;
     const da=Math.abs(norm(angle(shooter,t)-baseA));
@@ -873,7 +1163,7 @@ function pelletTarget(shooter,range,rayAngle){
   // almost exactly through the target's center angle.
   const HIT_RADIUS=18;
 
-  for(const t of enemyList(shooter===player?0:shooter.team)){
+  for(const t of enemyList(shooter===player?player.team:shooter.team)){
     if(!t.alive || !los(shooter,t)) continue;
 
     const dx=t.x-shooter.x;
@@ -903,7 +1193,7 @@ function fireBolt(shooter,w){
     y:shooter.y+Math.sin(shooter.a)*18,
     vx:Math.cos(shooter.a)*speed,
     vy:Math.sin(shooter.a)*speed,
-    team:shooter===player?0:shooter.team,
+    team:shooter===player?player.team:shooter.team,
     owner:shooter,
     life:1.7,
     damage:w.damage
@@ -911,6 +1201,7 @@ function fireBolt(shooter,w){
 }
 
 function shoot(shooter,wIndex){
+  if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
   if(shooter===player && player.weapon!==2 && player.ammo[wIndex]<=0){
     reload();
     return;
@@ -929,7 +1220,7 @@ function shoot(shooter,wIndex){
   if(shooter===player){
     if(wIndex!==2) player.ammo[wIndex]--;
   if(shooter===player && wIndex!==2 && player.ammo[wIndex]<=0){
-    setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reload(); },80);
+    setTimeout(()=>{ if(running && player.alive && player.ammo[wIndex]<=0) reloadWeapon(wIndex); },80);
   }
 
     if(wIndex===2 || noRecoil){
@@ -968,12 +1259,12 @@ function shoot(shooter,wIndex){
   if(best) damageTarget(best,w.damage,shooter);
 }
 
-function reload(){
-  if(player.weapon!==2){
-    player.ammo[player.weapon]=WEAPONS[player.weapon].mag;
-    notify(player.weapon===4 ? "석궁 장전" : "재장전");
-  }
+function reloadWeapon(wIndex=player.weapon){
+  if(wIndex===2) return;
+  player.ammo[wIndex]=WEAPONS[wIndex].mag;
+  if(wIndex===player.weapon) notify(wIndex===4 ? "석궁 장전" : "재장전");
 }
+function reload(){ reloadWeapon(player.weapon); }
 
 function selectWeapon(i){
   player.weapon=Math.max(0,Math.min(WEAPONS.length-1,i));
@@ -1015,7 +1306,7 @@ function resetCheats(){
 }
 
 ui.startAI.addEventListener("click",startMatch);
-ui.online.addEventListener("click",()=>notify("ONLINE은 Firebase 연동 경로 사용"));
+ui.online.addEventListener("click",openOnlinePanel);
 
 function updatePlayer(dt){
   if(!player.alive) return;
@@ -1074,7 +1365,7 @@ function updatePlayer(dt){
     let targetDelta=Infinity;
     let bestScore=Infinity;
 
-    for(const e of enemyList(0)){
+    for(const e of enemyList(player.team)){
       if(!los(player,e)) continue;
       const da=norm(angle(player,e)-player.a);
       const absDa=Math.abs(da);
@@ -1134,6 +1425,7 @@ function updateBloodFx(dt){
 }
 
 function updateProjectiles(dt){
+  if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
   for(let i=bolts.length-1;i>=0;i--){
     const b=bolts[i];
     b.life-=dt;
@@ -1147,7 +1439,7 @@ function updateProjectiles(dt){
       continue;
     }
 
-    const targets=b.team===0 ? bots.filter(e=>e.team===1&&e.alive) : [player,...bots.filter(e=>e.team===0&&e.alive)];
+    const targets=allEntities().filter(e=>e.alive && e.team!==b.team && e!==b.owner);
     let hit=null;
     for(const t of targets){
       if(Math.hypot(t.x-b.x,t.y-b.y)<14){hit=t;break;}
@@ -1164,42 +1456,168 @@ function updateProjectiles(dt){
   }
 }
 
-function updateBots(dt){
+function updateRemotePlayers(dt){
+  if(!onlineMode) return;
   for(const b of bots){
-    if(!b.alive) continue;
-    b.think -= dt;
-    const es=enemyList(b.team);
-    if(!es.length) continue;
-    es.sort((a,z)=>dist(b,a)-dist(b,z));
-    const t=es[0];
+    if(!b.remote) continue;
+    const k=Math.min(1,dt*14);
+    if(Number.isFinite(b.tx)) b.x += (b.tx-b.x)*k;
+    if(Number.isFinite(b.ty)) b.y += (b.ty-b.y)*k;
+    if(Number.isFinite(b.ta)) b.a += norm(b.ta-b.a)*k;
+    if(Number.isFinite(b.tPitch)) b.pitch += (b.tPitch-b.pitch)*k;
+    if(Number.isFinite(b.tJumpZ)) b.jumpZ += (b.tJumpZ-b.jumpZ)*k;
+    b.crouchBlend += ((b.crouched?1:0)-b.crouchBlend)*Math.min(1,dt*10);
+  }
+}
+
+function updateBots(dt){
+  if(onlineMode) return;
+
+  for(const b of bots){
+    if(!b.alive || b.remote) continue;
+
+    const enemies=enemyList(b.team).filter(e=>e!==b);
+    if(!enemies.length) continue;
+
+    // Target the closest visible enemy first; otherwise the closest enemy.
+    let visible=enemies.filter(e=>los(b,e));
+    visible.sort((a,z)=>dist(b,a)-dist(b,z));
+    enemies.sort((a,z)=>dist(b,a)-dist(b,z));
+    const t=(visible[0]||enemies[0]);
+    const sees=visible.includes(t);
     const d=dist(b,t);
-    const sees=los(b,t);
+
+    b.think-=dt;
+    b.repath-=dt;
 
     if(b.think<=0){
-      b.think=.45+Math.random()*.85;
-      if(Math.random()<.55) b.strafe*=-1;
-      b.wander += (Math.random()-.5)*1.8;
+      b.think=.35+Math.random()*.45;
+      if(Math.random()<.34) b.strafe*=-1;
+      if(Math.random()<.22) b.avoidSide*=-1;
     }
 
-    const targetA=angle(b,t);
-    if(sees) b.a += norm(targetA-b.a)*Math.min(1,dt*6);
-    else b.a += norm(b.wander-b.a)*Math.min(1,dt*2.4);
-
-    let forward = d>190 ? 1 : d<105 ? -.65 : .15;
-    let strafe = sees ? b.strafe*.72 : b.strafe*.28;
-    const speed = sees ? 82 : 64;
-    let dx=(Math.cos(b.a)*forward+Math.cos(b.a+Math.PI/2)*strafe)*speed*dt;
-    let dy=(Math.sin(b.a)*forward+Math.sin(b.a+Math.PI/2)*strafe)*speed*dt;
-
-    const ox=b.x, oy=b.y;
-    moveEnt(b,dx,dy);
-    if(Math.hypot(b.x-ox,b.y-oy)<.15){
-      b.strafe*=-1;
-      b.wander += Math.PI*(.35+Math.random()*.65);
-      b.a=b.wander;
+    const targetCell=`${Math.floor(t.x/TILE)},${Math.floor(t.y/TILE)}`;
+    const targetChanged=b.targetUid!==(t.uid||t.name)||b.targetCell!==targetCell;
+    if(targetChanged){
+      b.targetUid=t.uid||t.name;
+      b.targetCell=targetCell;
+      b.repath=0;
     }
 
-    if(sees && d<560) shoot(b,0);
+    // When no direct route exists, use grid navigation around walls.
+    if(!sees && (b.repath<=0 || b.pathIndex>=b.path.length)){
+      b.path=botPathfind(b.x,b.y,t.x,t.y);
+      b.pathIndex=0;
+      b.repath=BOT_REPATH_MIN+Math.random()*(BOT_REPATH_MAX-BOT_REPATH_MIN);
+    }
+
+    let desiredX=0,desiredY=0;
+    let faceA=angle(b,t);
+
+    if(sees){
+      // Combat movement: keep a sensible rifle distance, strafe, and don't
+      // blindly push into nearby cover.
+      const forward=d>245?1:d<125?-.72:.08;
+      const strafe=b.strafe*(d<420?.62:.34);
+      desiredX=Math.cos(faceA)*forward+Math.cos(faceA+Math.PI/2)*strafe;
+      desiredY=Math.sin(faceA)*forward+Math.sin(faceA+Math.PI/2)*strafe;
+
+      // If the direct combat vector would hit a wall, fall back to a path
+      // waypoint instead of rubbing against the obstacle forever.
+      const probe=20;
+      const plen=Math.hypot(desiredX,desiredY)||1;
+      if(circleHitsWall(b.x+desiredX/plen*probe,b.y+desiredY/plen*probe,BOT_RADIUS)){
+        if(b.repath<=0){
+          b.path=botPathfind(b.x,b.y,t.x,t.y);
+          b.pathIndex=0;
+          b.repath=.18+Math.random()*.16;
+        }
+        if(b.path.length){
+          const wp=b.path[Math.min(b.pathIndex,b.path.length-1)];
+          const wa=Math.atan2(wp.y-b.y,wp.x-b.x);
+          desiredX=Math.cos(wa);
+          desiredY=Math.sin(wa);
+        }else{
+          // Local sidestep if there is no path yet.
+          desiredX=Math.cos(faceA+Math.PI/2*b.avoidSide);
+          desiredY=Math.sin(faceA+Math.PI/2*b.avoidSide);
+        }
+      }
+    }else if(b.path.length){
+      let wp=b.path[Math.min(b.pathIndex,b.path.length-1)];
+      while(wp && Math.hypot(wp.x-b.x,wp.y-b.y)<18){
+        b.pathIndex++;
+        wp=b.path[b.pathIndex];
+      }
+      if(wp){
+        const wa=Math.atan2(wp.y-b.y,wp.x-b.x);
+        desiredX=Math.cos(wa);
+        desiredY=Math.sin(wa);
+        faceA=wa;
+      }else{
+        b.repath=0;
+      }
+    }else{
+      // Pathfinding failed temporarily: rotate/search in open space, never warp.
+      const a=b.a+(.8*b.avoidSide);
+      desiredX=Math.cos(a)*.35;
+      desiredY=Math.sin(a)*.35;
+      faceA=a;
+      b.repath=0;
+    }
+
+    // Don't form one giant blob. Separation is weak enough not to ruin paths.
+    const sep=botSeparation(b);
+    desiredX+=sep.x*.72;
+    desiredY+=sep.y*.72;
+
+    const len=Math.hypot(desiredX,desiredY);
+    if(len>0){
+      desiredX/=len;desiredY/=len;
+    }
+
+    // Aim at the enemy when visible; otherwise face the waypoint.
+    const turnRate=sees?7.5:5.2;
+    b.a+=norm(faceA-b.a)*Math.min(1,dt*turnRate);
+
+    const wantedSpeed=sees?BOT_SPEED:BOT_SPEED*.94;
+    const requested=wantedSpeed*dt;
+    const moved=moveBotSafe(b,desiredX*requested,desiredY*requested);
+
+    // Stuck detection: re-path + change avoidance direction. NO position snaps.
+    if(requested>.2 && moved<requested*.20){
+      b.stuckFor+=dt;
+      if(b.stuckFor>.18){
+        b.repath=0;
+        b.path=[];
+        b.pathIndex=0;
+        b.avoidSide*=-1;
+        b.strafe*=-1;
+      }
+    }else{
+      b.stuckFor=Math.max(0,b.stuckFor-dt*2.5);
+    }
+
+    // Absolute anti-teleport safety. A bot may never move faster than its
+    // physical speed plus a tiny numerical margin during a normal frame.
+    const frameMove=Math.hypot(b.x-b.lastX,b.y-b.lastY);
+    const maxFrameMove=BOT_SPEED*dt*1.20+0.8;
+    if(frameMove>maxFrameMove && dt<.05){
+      const a=Math.atan2(b.y-b.lastY,b.x-b.lastX);
+      b.x=b.lastX+Math.cos(a)*maxFrameMove;
+      b.y=b.lastY+Math.sin(a)*maxFrameMove;
+      if(circleHitsWall(b.x,b.y,BOT_RADIUS)){
+        b.x=b.lastX;b.y=b.lastY;
+      }
+      b.repath=0;
+    }
+    b.lastX=b.x;b.lastY=b.y;
+
+    // Fire only with actual line of sight. Slightly slower than perfect aim.
+    if(sees && d<560){
+      const aimError=Math.abs(norm(angle(b,t)-b.a));
+      if(aimError<.17) shoot(b,0);
+    }
   }
 }
 
@@ -1436,12 +1854,12 @@ function renderWorld(){
   const cam=viewActor();
   const spectating=!player.alive && cam!==player;
   const camRecoil=spectating?0:recoilPitch;
-  const viewPitch=spectating?0:cameraPitch;
+  const viewPitch=spectating?(cam.pitch||0):cameraPitch;
 
   // Camera height in "wall-height units".
   // 0 = floor, 1 = top of a wall. Standing eye height is around 0.50.
-  const jumpHeight=spectating?0:(player.jumpZ/(TILE*2.1));
-  const crouchDrop=spectating?0:(player.crouchBlend*.18);
+  const jumpHeight=(spectating?(cam.jumpZ||0):player.jumpZ)/(TILE*2.1);
+  const crouchDrop=(spectating?(cam.crouchBlend||0):player.crouchBlend)*.18;
   const cameraHeight=Math.max(.24,Math.min(.82,.50+jumpHeight-crouchDrop));
 
   // TRUE vertical free-look:
@@ -1507,7 +1925,8 @@ function renderWorld(){
     const sz=Math.min(h*.72,17000/Math.max(d,1));
 
     if(los(cam,e)){
-      const baseY=horizon+sz*cameraHeight;
+      const remoteJump=(e.jumpZ||0)*Math.max(.25,sz/110);
+      const baseY=horizon+sz*cameraHeight-remoteJump;
       drawSoldierModel(e,sx,baseY,sz);
 
       // Visible-unit health bar is normal HUD, independent of ESP.
@@ -1581,7 +2000,7 @@ function renderWorld(){
   }
 
   // first-person weapon view models: detailed shapes that still converge on the crosshair
-  const viewWeapon=spectating?0:player.weapon;
+  const viewWeapon=spectating?(cam.weapon||0):player.weapon;
   const kickY = spectating?0:recoilKick*34;
   const kickX = spectating?0:recoilSide*w*1.7;
   const cx=w/2, cy=h/2;
@@ -1783,11 +2202,18 @@ function renderWorld(){
 
   const blueAlive=aliveCount(0), redAlive=aliveCount(1);
   ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
-  ui.hp.textContent=`HEALTH ${Math.max(0,player.hp)}`;
+  const omb=$("onlineMatchBanner");
+  if(omb){
+    omb.style.display=onlineMode&&running?"block":"none";
+    if(onlineMode&&running) omb.textContent=`ONLINE · ${online.roomCode||"------"} · ${online.isHost?"HOST · ":""}${online.connectionLabel}`;
+  }
+  const hudActor=(!player.alive && cam!==player)?cam:player;
+  const hudHp=Math.max(0,Math.ceil(hudActor.hp||0));
+  ui.hp.textContent=`HEALTH ${hudHp}`;
   const hbFill=document.getElementById("healthBarFill");
   const hbValue=document.getElementById("healthBarValue");
-  if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,player.hp))}%`;
-  if(hbValue) hbValue.textContent=Math.max(0,Math.ceil(player.hp));
+  if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,hudHp))}%`;
+  if(hbValue) hbValue.textContent=hudHp;
   const dn=document.getElementById("deathNotice");
   const inSpectator=!player.alive && !roundOver;
   if(dn) dn.style.display=inSpectator?"block":"none";
@@ -1808,8 +2234,10 @@ function renderWorld(){
         ? (player.jumpVel>0 ? "JUMPING ↑" : "FALLING ↓")
         : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
   }
-  const wp=WEAPONS[player.weapon];
-  ui.ammo.textContent=viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`;
+  const wp=WEAPONS[viewWeapon];
+  ui.ammo.textContent=spectating
+    ? `${wp.name} · SPECTATING`
+    : (viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`);
   ui.kd.textContent=`K/D ${player.kills} / ${player.deaths}`;
   ui.aimState.textContent=`F1 AIM ${aimOn?"ON":"OFF"}`;
   ui.aimState.classList.toggle("cheatOn",aimOn);
@@ -1955,9 +2383,9 @@ addEventListener("keydown",e=>{
     if(player.alive) tryJump();
     else cycleSpectator();
   }
-  if(e.key==="F1"){e.preventDefault();toggleAim();}
-  if(e.key==="F2"){e.preventDefault();toggleEsp();}
-  if(e.key==="F3"){e.preventDefault();toggleNoRecoil();}
+  if(e.key==="F1"){e.preventDefault();if(!e.repeat)toggleAim();}
+  if(e.key==="F2"){e.preventDefault();if(!e.repeat)toggleEsp();}
+  if(e.key==="F3"){e.preventDefault();if(!e.repeat)toggleNoRecoil();}
 });
 addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false});
 
@@ -1995,14 +2423,667 @@ ui.aim.addEventListener("click",toggleAim);
 ui.esp.addEventListener("click",toggleEsp);
 ui.noRecoil?.addEventListener("click",toggleNoRecoil);
 
+
+/* =========================================================
+   FIREBASE REALTIME MULTIPLAYER
+   - 10 player room (5v5)
+   - anonymous auth
+   - shooter sends damage event, victim owns HP
+   - host owns round state
+========================================================= */
+const FIREBASE_CONFIG_KEY="cheatArena.firebaseConfig.v1";
+const ONLINE_NAME_KEY="cheatArena.nickname.v1";
+
+const online={
+  app:null,auth:null,db:null,user:null,mods:null,
+  roomCode:null,room:null,roomUnsub:null,presence:null,
+  isHost:false,remoteByUid:new Map(),seenEvents:new Set(),
+  stateWritePending:false,pendingState:null,lastStateWrite:0,lastRoundToken:null,
+  connectionLabel:"OFFLINE",hostTickAt:0,cleanupAt:0
+};
+
+function onlineStatus(text,good=false){
+  const el=$("onlineStatus");
+  if(!el) return;
+  el.textContent=text;
+  el.style.color=good?"#9fe6af":"#aeb8c0";
+}
+
+function openOnlinePanel(){
+  $("onlineOverlay").classList.add("show");
+  $("onlineHome").classList.remove("hidden");
+  $("onlineRoom").classList.add("hidden");
+  const savedName=localStorage.getItem(ONLINE_NAME_KEY);
+  if(savedName) $("onlineNickname").value=savedName;
+  const saved=localStorage.getItem(FIREBASE_CONFIG_KEY);
+  $("firebaseConfigInput").value=saved?prettyFirebaseConfig(saved):"";
+  onlineStatus(saved?"Firebase 설정 저장됨 · 방 만들기/참가 가능":"Firebase 설정을 먼저 붙여넣어야 함");
+}
+
+function closeOnlinePanel(){
+  if(online.roomCode) return;
+  $("onlineOverlay").classList.remove("show");
+}
+
+function parseFirebaseConfig(text){
+  const keys=["apiKey","authDomain","databaseURL","projectId","storageBucket","messagingSenderId","appId"];
+  const out={};
+  for(const key of keys){
+    const re=new RegExp(key+"\\\\s*:\\\\s*[\\\"']([^\\\"']+)[\\\"']");
+    const m=String(text||"").match(re);
+    if(m) out[key]=m[1].trim();
+  }
+  if(!out.apiKey || !out.databaseURL || !out.projectId){
+    throw new Error("apiKey / databaseURL / projectId를 찾지 못함");
+  }
+  return out;
+}
+function prettyFirebaseConfig(saved){
+  try{
+    const c=JSON.parse(saved);
+    return `const firebaseConfig = ${JSON.stringify(c,null,2)};`;
+  }catch{return saved||""}
+}
+function getFirebaseConfig(){
+  const saved=localStorage.getItem(FIREBASE_CONFIG_KEY);
+  if(!saved) return null;
+  try{return JSON.parse(saved)}catch{return null}
+}
+function configReady(){
+  const c=getFirebaseConfig();
+  return !!(c?.apiKey && c?.databaseURL && c?.projectId);
+}
+
+async function loadFirebase(){
+  if(online.mods) return online.mods;
+  onlineStatus("Firebase SDK 불러오는 중...");
+  const [
+    appMod,authMod,dbMod
+  ]=await Promise.all([
+    import("https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js"),
+    import("https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js")
+  ]);
+  online.mods={...appMod,...authMod,...dbMod};
+  return online.mods;
+}
+
+async function ensureFirebase(){
+  if(online.user && online.db) return online.user;
+  const cfg=getFirebaseConfig();
+  if(!cfg) throw new Error("FIREBASE_CONFIG_REQUIRED");
+  const m=await loadFirebase();
+
+  if(!online.app){
+    online.app=m.initializeApp(cfg,"cheat-arena-"+Math.random().toString(36).slice(2));
+    online.auth=m.getAuth(online.app);
+    online.db=m.getDatabase(online.app);
+  }
+  online.connectionLabel="CONNECTING";
+  onlineStatus("Firebase 익명 로그인 중...");
+  let u=online.auth.currentUser;
+  if(!u){
+    const cred=await m.signInAnonymously(online.auth);
+    u=cred.user;
+  }
+  online.user=u;
+  online.connectionLabel="CONNECTED";
+  onlineStatus("Firebase 연결됨",true);
+  return u;
+}
+
+function randomRoomCode(){
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s="";
+  for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function cleanNickname(){
+  const n=String($("onlineNickname").value||"PLAYER").trim().slice(0,12)||"PLAYER";
+  localStorage.setItem(ONLINE_NAME_KEY,n);
+  return n;
+}
+function activeOnlinePlayers(room=online.room){
+  const ps=room?.players||{};
+  return Object.entries(ps)
+    .filter(([,p])=>p && p.online!==false)
+    .map(([uid,p])=>({uid,...p}))
+    .sort((a,b)=>(a.joinedAt||0)-(b.joinedAt||0));
+}
+function onlinePlayerByUid(uid){
+  return activeOnlinePlayers().find(p=>p.uid===uid)||null;
+}
+function teamName(team){return team===0?"BLUE":"RED"}
+
+async function createOnlineRoom(){
+  try{
+    await ensureFirebase();
+    const m=online.mods,name=cleanNickname();
+    let code=null;
+    for(let i=0;i<12;i++){
+      const c=randomRoomCode();
+      const snap=await m.get(m.ref(online.db,`rooms/${c}`));
+      if(!snap.exists()){code=c;break}
+    }
+    if(!code) throw new Error("방 코드를 만들지 못함");
+
+    const now=Date.now();
+    await m.set(m.ref(online.db,`rooms/${code}`),{
+      meta:{
+        hostUid:online.user.uid,status:"lobby",mapIndex:0,
+        roundToken:0,roundNumber:1,blueWins:0,redWins:0,
+        createdAt:now,roundStartsAt:0,nextRoundAt:0,returnLobbyAt:0
+      },
+      players:{
+        [online.user.uid]:{
+          name,team:0,joinedAt:now,online:true,lastSeen:now,
+          x:0,y:0,a:0,pitch:0,hp:100,alive:true,weapon:0,
+          jumpZ:0,crouched:false,kills:0,deaths:0,roundToken:0
+        }
+      }
+    });
+    await enterOnlineRoom(code);
+  }catch(err){
+    console.error(err);
+    onlineStatus(formatFirebaseError(err));
+  }
+}
+
+async function joinOnlineRoom(){
+  try{
+    await ensureFirebase();
+    const m=online.mods,name=cleanNickname();
+    const code=String($("joinOnlineCode").value||"").trim().toUpperCase();
+    if(code.length!==6) throw new Error("6자리 방 코드를 입력");
+    const roomRef=m.ref(online.db,`rooms/${code}`);
+    const snap=await m.get(roomRef);
+    if(!snap.exists()) throw new Error("존재하지 않는 방");
+    const room=snap.val();
+    if(room?.meta?.status!=="lobby") throw new Error("이미 경기 중인 방");
+
+    const players=Object.entries(room.players||{}).map(([uid,p])=>({uid,...p}));
+    if(players.length>=10) throw new Error("방이 가득 참 (10/10)");
+    const blue=players.filter(p=>p.team===0).length;
+    const red=players.filter(p=>p.team===1).length;
+    let team=blue<=red?0:1;
+    if(team===0 && blue>=5) team=1;
+    if(team===1 && red>=5) team=0;
+    if((team===0?blue:red)>=5) throw new Error("양 팀이 모두 가득 참");
+
+    const now=Date.now();
+    await m.set(m.ref(online.db,`rooms/${code}/players/${online.user.uid}`),{
+      name,team,joinedAt:now,online:true,lastSeen:now,
+      x:0,y:0,a:0,pitch:0,hp:100,alive:true,weapon:0,
+      jumpZ:0,crouched:false,kills:0,deaths:0,roundToken:0
+    });
+    await enterOnlineRoom(code);
+  }catch(err){
+    console.error(err);
+    onlineStatus(formatFirebaseError(err));
+  }
+}
+
+async function enterOnlineRoom(code){
+  onlineMode=true;
+  online.roomCode=code;
+  online.lastRoundToken=null;
+  online.seenEvents.clear();
+  bots.length=0;
+  online.remoteByUid.clear();
+
+  const m=online.mods;
+  const meRef=m.ref(online.db,`rooms/${code}/players/${online.user.uid}`);
+  await m.update(meRef,{online:true,lastSeen:Date.now()});
+  try{
+    online.presence=m.onDisconnect(meRef);
+    await online.presence.remove();
+  }catch(err){console.warn("presence",err)}
+
+  if(online.roomUnsub) online.roomUnsub();
+  online.roomUnsub=m.onValue(
+    m.ref(online.db,`rooms/${code}`),
+    snap=>handleOnlineSnapshot(snap.exists()?snap.val():null),
+    err=>onlineStatus("ROOM LISTENER: "+formatFirebaseError(err))
+  );
+
+  $("onlineHome").classList.add("hidden");
+  $("onlineRoom").classList.remove("hidden");
+  $("onlineRoomCode").textContent=code;
+  onlineStatus("방 연결 중...");
+}
+
+async function leaveOnlineRoom(){
+  const code=online.roomCode,uid=online.user?.uid;
+  try{
+    if(code&&uid&&online.db){
+      const others=activeOnlinePlayers().filter(p=>p.uid!==uid);
+      if(online.isHost && others.length===0){
+        await online.mods.remove(online.mods.ref(online.db,`rooms/${code}`));
+      }else{
+        await online.mods.remove(online.mods.ref(online.db,`rooms/${code}/players/${uid}`));
+        if(online.isHost && others.length){
+          await online.mods.update(
+            online.mods.ref(online.db,`rooms/${code}/meta`),
+            {hostUid:others[0].uid}
+          ).catch(()=>{});
+        }
+      }
+    }
+  }catch(err){console.warn(err)}
+  if(online.roomUnsub){online.roomUnsub();online.roomUnsub=null}
+  online.roomCode=null;online.room=null;online.isHost=false;
+  online.lastRoundToken=null;online.remoteByUid.clear();online.seenEvents.clear();
+  onlineMode=false;online.connectionLabel=online.user?"CONNECTED":"OFFLINE";
+  bots.length=0;rebuildAIBots();
+  enterLobby();
+  $("onlineRoom").classList.add("hidden");
+  $("onlineHome").classList.remove("hidden");
+  $("onlineOverlay").classList.remove("show");
+  $("onlineMatchBanner").style.display="none";
+}
+
+function renderOnlineLobby(){
+  const room=online.room;
+  if(!room) return;
+  const ps=activeOnlinePlayers(room);
+  const blue=ps.filter(p=>p.team===0).length;
+  const red=ps.filter(p=>p.team===1).length;
+  $("onlineRoomCode").textContent=online.roomCode||"------";
+  $("onlineRoomMeta").textContent=`${ps.length}/10 · BLUE ${blue}/5 · RED ${red}/5 · ${online.isHost?"내가 HOST":"HOST 대기"}`;
+  $("onlinePlayers").innerHTML=ps.map(p=>`
+    <div class="onlinePlayer">
+      <span class="${p.team===0?"blue":"red"}">${teamName(p.team)}</span>
+      <span>${escapeOnlineHtml(p.name||"PLAYER")}${p.uid===room.meta?.hostUid?" ★":""}${p.uid===online.user?.uid?" (YOU)":""}</span>
+      <span>${p.online===false?"OFFLINE":"READY"}</span>
+    </div>
+  `).join("");
+  $("startOnlineMatch").style.display=online.isHost?"block":"none";
+}
+
+function escapeOnlineHtml(s){
+  return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+}
+
+async function startOnlineMatch(){
+  if(!online.isHost || !online.room) return;
+  const ps=activeOnlinePlayers();
+  const blue=ps.filter(p=>p.team===0).length;
+  const red=ps.filter(p=>p.team===1).length;
+  if(ps.length<2 || blue<1 || red<1){
+    onlineStatus("BLUE/RED에 최소 1명씩 있어야 시작 가능");
+    return;
+  }
+  const mapIndex=Math.floor(Math.random()*MAPS.length);
+  const now=Date.now();
+  try{
+    await online.mods.update(online.mods.ref(online.db,`rooms/${online.roomCode}/meta`),{
+      status:"playing",mapIndex,roundToken:1,roundNumber:1,
+      blueWins:0,redWins:0,roundStartsAt:now+900,nextRoundAt:0,returnLobbyAt:0,
+      winnerTeam:null
+    });
+  }catch(err){onlineStatus(formatFirebaseError(err))}
+}
+
+function onlineSpawnFor(team,uid,room){
+  const ps=activeOnlinePlayers(room).filter(p=>p.team===team);
+  const idx=Math.max(0,ps.findIndex(p=>p.uid===uid));
+  const list=team===0?[playerSpawn,...blueSpawn]:redSpawn;
+  return list[idx%list.length];
+}
+
+function beginOnlineRound(room){
+  const me=room?.players?.[online.user.uid];
+  const meta=room?.meta;
+  if(!me||!meta) return;
+
+  onlineMode=true;
+  applyMap(Number(meta.mapIndex)||0);
+  blueRoundWins=Number(meta.blueWins)||0;
+  redRoundWins=Number(meta.redWins)||0;
+  roundNumber=Number(meta.roundNumber)||1;
+  updateRoundHud();
+
+  player.team=Number(me.team)||0;
+  const sp=onlineSpawnFor(player.team,online.user.uid,room);
+  player.x=sp[0]*TILE;player.y=sp[1]*TILE;player.a=0;
+  player.hp=100;player.alive=true;player.weapon=0;player.ammo=[30,12,999,6,1,50];
+  player.nextShot=0;player.jumpZ=0;player.jumpVel=0;player.crouched=false;
+  player.crouchBlend=0;player.landingKick=0;
+  cameraPitch=0;recoilPitch=0;recoilKick=0;recoilSide=0;
+  firing=false;roundOver=false;running=true;matchState=MATCH_STATE.PLAYING;
+  bolts.length=0;impacts.length=0;bloodFx.length=0;damageFlash=0;
+  setSpectateTarget(null);setMatchUi(true);
+  $("onlineOverlay").classList.remove("show");
+  online.lastRoundToken=meta.roundToken;
+  syncRemotePlayers(room.players||{});
+  syncOnlineState(true);
+  notify(`ONLINE ROUND ${roundNumber} · ${teamName(player.team)}`);
+}
+
+function enterOnlineLobbyState(){
+  running=false;firing=false;roundOver=true;matchState=MATCH_STATE.LOBBY;
+  resetCheats();document.exitPointerLock?.();
+  setMatchUi(false);
+  $("onlineMatchBanner").style.display="none";
+  $("onlineOverlay").classList.add("show");
+  $("onlineHome").classList.add("hidden");
+  $("onlineRoom").classList.remove("hidden");
+  renderOnlineLobby();
+}
+
+function handleOnlineSnapshot(room){
+  if(!room){
+    onlineStatus("방이 삭제되었거나 연결이 끊김");
+    leaveOnlineRoom();
+    return;
+  }
+  online.room=room;
+
+  const ps=activeOnlinePlayers(room);
+  const me=room.players?.[online.user.uid];
+  if(!me){
+    onlineStatus("이 방에서 연결이 종료됨");
+    leaveOnlineRoom();
+    return;
+  }
+
+  // Host migration: oldest connected player takes over.
+  const hostExists=ps.some(p=>p.uid===room.meta?.hostUid);
+  if(!hostExists && ps[0]?.uid===online.user.uid){
+    online.mods.update(online.mods.ref(online.db,`rooms/${online.roomCode}/meta`),{hostUid:online.user.uid}).catch(()=>{});
+  }
+  online.isHost=(room.meta?.hostUid===online.user.uid);
+  player.team=Number(me.team)||0;
+  player.kills=Number(me.kills)||0;
+  player.deaths=Number(me.deaths)||0;
+
+  syncRemotePlayers(room.players||{});
+  processOnlineEvents(room.events||{});
+
+  const meta=room.meta||{};
+  blueRoundWins=Number(meta.blueWins)||0;
+  redRoundWins=Number(meta.redWins)||0;
+  roundNumber=Number(meta.roundNumber)||1;
+  updateRoundHud();
+
+  if(meta.status==="lobby"){
+    enterOnlineLobbyState();
+    onlineStatus(`방 연결됨 · ${online.roomCode}`,true);
+    return;
+  }
+
+  if(meta.status==="playing"){
+    if(online.lastRoundToken!==meta.roundToken){
+      beginOnlineRound(room);
+    }else{
+      running=true;roundOver=false;matchState=MATCH_STATE.PLAYING;
+    }
+    return;
+  }
+
+  if(meta.status==="round_end"){
+    running=true;roundOver=true;firing=false;matchState=MATCH_STATE.ROUND_END;
+    const w=meta.winnerTeam;
+    notify(w===0?"BLUE ROUND WIN":w===1?"RED ROUND WIN":"ROUND DRAW");
+    return;
+  }
+
+  if(meta.status==="match_end"){
+    running=true;roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;
+    resetCheats();
+    notify(meta.winnerTeam===0?"BLUE TEAM WINS":"RED TEAM WINS");
+  }
+}
+
+function syncRemotePlayers(players){
+  if(!onlineMode || !online.user) return;
+  const live=new Set();
+
+  for(const [uid,p] of Object.entries(players||{})){
+    if(uid===online.user.uid || !p || p.online===false) continue;
+    live.add(uid);
+    let e=online.remoteByUid.get(uid);
+    if(!e){
+      e={
+        uid,remote:true,name:p.name||"PLAYER",team:Number(p.team)||0,
+        x:Number(p.x)||0,y:Number(p.y)||0,a:Number(p.a)||0,
+        tx:Number(p.x)||0,ty:Number(p.y)||0,ta:Number(p.a)||0,
+        pitch:Number(p.pitch)||0,tPitch:Number(p.pitch)||0,
+        hp:Number(p.hp??100),alive:p.alive!==false,weapon:Number(p.weapon)||0,
+        jumpZ:Number(p.jumpZ)||0,tJumpZ:Number(p.jumpZ)||0,
+        crouched:!!p.crouched,crouchBlend:p.crouched?1:0,nextShot:0
+      };
+      online.remoteByUid.set(uid,e);
+      bots.push(e);
+    }else{
+      e.name=p.name||e.name;e.team=Number(p.team)||0;
+      e.tx=Number(p.x)||0;e.ty=Number(p.y)||0;e.ta=Number(p.a)||0;
+      e.tPitch=Number(p.pitch)||0;e.tJumpZ=Number(p.jumpZ)||0;
+      e.hp=Number(p.hp??e.hp);e.alive=p.alive!==false;e.weapon=Number(p.weapon)||0;
+      e.crouched=!!p.crouched;
+      if(Math.hypot(e.tx-e.x,e.ty-e.y)>TILE*3){e.x=e.tx;e.y=e.ty}
+    }
+  }
+
+  for(const [uid,e] of [...online.remoteByUid]){
+    if(!live.has(uid)){
+      online.remoteByUid.delete(uid);
+      const i=bots.indexOf(e);
+      if(i>=0) bots.splice(i,1);
+    }
+  }
+  if(!player.alive) ensureSpectateTarget();
+}
+
+function buildOnlineState(){
+  const token=online.room?.meta?.roundToken||0;
+  return {
+    name:cleanNickname(),team:player.team,
+    x:Math.round(player.x*100)/100,y:Math.round(player.y*100)/100,
+    a:player.a,pitch:cameraPitch,hp:Math.max(0,player.hp),alive:!!player.alive,
+    weapon:player.weapon,jumpZ:player.jumpZ,crouched:!!player.crouched,
+    kills:player.kills,deaths:player.deaths,lastSeen:Date.now(),
+    online:true,roundToken:token
+  };
+}
+
+async function syncOnlineState(force=false){
+  if(!onlineMode || !online.roomCode || !online.user || !online.db) return;
+  const now=performance.now();
+  if(!force && now-online.lastStateWrite<80) return;
+  if(!force) online.lastStateWrite=now;
+
+  // Always keep the newest state. If a write is already running, it will
+  // immediately flush this newer snapshot afterwards. This prevents HP
+  // updates from arriving at Firebase out of order during rapid damage.
+  online.pendingState=buildOnlineState();
+  if(online.stateWritePending) return;
+
+  online.stateWritePending=true;
+  try{
+    while(online.pendingState){
+      const state=online.pendingState;
+      online.pendingState=null;
+      await online.mods.update(
+        online.mods.ref(online.db,`rooms/${online.roomCode}/players/${online.user.uid}`),
+        state
+      );
+    }
+  }catch(err){
+    console.warn("state write",err);
+  }finally{
+    online.stateWritePending=false;
+    if(online.pendingState) syncOnlineState(true);
+  }
+}
+
+async function sendOnlineDamage(targetUid,damage,weapon){
+  if(!onlineMode||!online.roomCode||!online.user||!targetUid) return;
+  try{
+    const m=online.mods;
+    const evRef=m.push(m.ref(online.db,`rooms/${online.roomCode}/events`));
+    await m.set(evRef,{
+      type:"damage",targetUid,shooterUid:online.user.uid,
+      damage:Math.max(0,Number(damage)||0),weapon:Number(weapon)||0,
+      roundToken:online.room?.meta?.roundToken||0,createdAt:m.serverTimestamp()
+    });
+  }catch(err){console.warn("damage event",err)}
+}
+
+function processOnlineEvents(events){
+  if(!online.user || !online.roomCode) return;
+  for(const [id,ev] of Object.entries(events||{})){
+    if(!ev || ev.targetUid!==online.user.uid || online.seenEvents.has(id)) continue;
+    online.seenEvents.add(id);
+
+    const sameRound=ev.roundToken===(online.room?.meta?.roundToken||0);
+    if(sameRound && matchState===MATCH_STATE.PLAYING && player.alive && ev.type==="damage"){
+      applyIncomingOnlineDamage(Number(ev.damage)||0,ev.shooterUid);
+    }
+    online.mods.remove(online.mods.ref(online.db,`rooms/${online.roomCode}/events/${id}`)).catch(()=>{});
+  }
+  if(online.seenEvents.size>500) online.seenEvents.clear();
+}
+
+function applyIncomingOnlineDamage(amount,shooterUid){
+  if(!player.alive || amount<=0) return;
+  player.hp=Math.max(0,player.hp-amount);
+  damageFlash=Math.min(1,damageFlash+.75);
+  spawnBlood(player);
+  if(player.hp<=0){
+    player.alive=false;player.deaths++;
+    player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;
+    ensureSpectateTarget();
+
+    if(shooterUid){
+      const killsRef=online.mods.ref(online.db,`rooms/${online.roomCode}/players/${shooterUid}/kills`);
+      online.mods.runTransaction(killsRef,v=>(Number(v)||0)+1).catch(()=>{});
+    }
+  }
+  syncOnlineState(true);
+}
+
+async function finishOnlineRound(winnerTeam){
+  if(!online.isHost || !online.roomCode) return;
+  const m=online.mods,metaRef=m.ref(online.db,`rooms/${online.roomCode}/meta`);
+  try{
+    await m.runTransaction(metaRef,meta=>{
+      if(!meta || meta.status!=="playing") return;
+      let bw=Number(meta.blueWins)||0, rw=Number(meta.redWins)||0;
+      if(winnerTeam===0) bw++;
+      else if(winnerTeam===1) rw++;
+      const matchWinner=bw>=ROUNDS_TO_WIN?0:rw>=ROUNDS_TO_WIN?1:null;
+      const now=Date.now();
+      return {
+        ...meta,blueWins:bw,redWins:rw,winnerTeam:matchWinner??winnerTeam,
+        status:matchWinner===null?"round_end":"match_end",
+        nextRoundAt:matchWinner===null?now+1800:0,
+        returnLobbyAt:matchWinner===null?0:now+2600
+      };
+    });
+  }catch(err){console.warn("finish online round",err)}
+}
+
+async function hostOnlineTick(){
+  if(!online.isHost || !online.room || !online.roomCode) return;
+  const now=Date.now();
+  if(now-online.hostTickAt<180) return;
+  online.hostTickAt=now;
+
+  const meta=online.room.meta||{};
+  const ps=activeOnlinePlayers();
+
+  if(meta.status==="playing"){
+    if(now<(Number(meta.roundStartsAt)||0)+350) return;
+    const ready=ps.filter(p=>p.roundToken===meta.roundToken);
+    if(ready.length!==ps.length || !ready.length) return;
+
+    const blueAlive=ready.filter(p=>p.team===0&&p.alive!==false).length;
+    const redAlive=ready.filter(p=>p.team===1&&p.alive!==false).length;
+    if(blueAlive===0 && redAlive===0) await finishOnlineRound(-1);
+    else if(blueAlive===0) await finishOnlineRound(1);
+    else if(redAlive===0) await finishOnlineRound(0);
+  }else if(meta.status==="round_end" && now>=(Number(meta.nextRoundAt)||Infinity)){
+    const metaRef=online.mods.ref(online.db,`rooms/${online.roomCode}/meta`);
+    await online.mods.runTransaction(metaRef,m=>{
+      if(!m || m.status!=="round_end") return;
+      return {
+        ...m,status:"playing",roundToken:(Number(m.roundToken)||0)+1,
+        roundNumber:(Number(m.roundNumber)||1)+1,roundStartsAt:Date.now()+850,
+        nextRoundAt:0,winnerTeam:null
+      };
+    }).catch(()=>{});
+  }else if(meta.status==="match_end" && now>=(Number(meta.returnLobbyAt)||Infinity)){
+    const metaRef=online.mods.ref(online.db,`rooms/${online.roomCode}/meta`);
+    await online.mods.runTransaction(metaRef,m=>{
+      if(!m || m.status!=="match_end") return;
+      return {
+        ...m,status:"lobby",roundToken:0,roundNumber:1,blueWins:0,redWins:0,
+        roundStartsAt:0,nextRoundAt:0,returnLobbyAt:0,winnerTeam:null
+      };
+    }).catch(()=>{});
+  }
+
+  // Remove abandoned old events.
+  if(now-online.cleanupAt>5000){
+    online.cleanupAt=now;
+    for(const [id,ev] of Object.entries(online.room.events||{})){
+      if(typeof ev?.createdAt==="number" && now-ev.createdAt>10000){
+        online.mods.remove(online.mods.ref(online.db,`rooms/${online.roomCode}/events/${id}`)).catch(()=>{});
+      }
+    }
+  }
+}
+
+function onlineTick(){
+  if(!onlineMode) return;
+  if(running && matchState===MATCH_STATE.PLAYING) syncOnlineState(false);
+  hostOnlineTick();
+}
+
+function formatFirebaseError(err){
+  const code=err?.code||"";
+  if(code.includes("operation-not-allowed")) return "Firebase Authentication에서 Anonymous 로그인을 활성화해야 함";
+  if(code.includes("permission-denied")) return "Realtime Database Rules가 쓰기를 막고 있음 · ZIP의 firebase-rtdb-rules.json 적용 필요";
+  if(code.includes("api-key-not-valid")) return "Firebase apiKey가 올바르지 않음";
+  if(String(err?.message||err).includes("FIREBASE_CONFIG_REQUIRED")) return "Firebase 설정을 먼저 저장해야 함";
+  return String(err?.message||err||"Firebase 오류");
+}
+
+$("saveFirebaseConfig").addEventListener("click",async()=>{
+  try{
+    const cfg=parseFirebaseConfig($("firebaseConfigInput").value);
+    localStorage.setItem(FIREBASE_CONFIG_KEY,JSON.stringify(cfg));
+    if(online.app && online.mods?.deleteApp){
+      try{await online.mods.deleteApp(online.app)}catch{}
+      online.app=null;online.auth=null;online.db=null;online.user=null;
+      online.connectionLabel="OFFLINE";
+    }
+    onlineStatus("Firebase 설정 저장 완료 · 이제 방 만들기/참가 가능",true);
+  }catch(err){onlineStatus("설정 오류: "+err.message)}
+});
+$("clearFirebaseConfig").addEventListener("click",()=>{
+  localStorage.removeItem(FIREBASE_CONFIG_KEY);
+  $("firebaseConfigInput").value="";
+  onlineStatus("Firebase 설정 삭제됨");
+});
+$("closeOnline").addEventListener("click",closeOnlinePanel);
+$("createOnlineRoom").addEventListener("click",createOnlineRoom);
+$("joinOnlineRoom").addEventListener("click",joinOnlineRoom);
+$("startOnlineMatch").addEventListener("click",startOnlineMatch);
+$("leaveOnlineRoom").addEventListener("click",leaveOnlineRoom);
+$("joinOnlineCode").addEventListener("input",e=>{
+  e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);
+});
+
 function loop(now){
   const dt=Math.min(.033,(now-last)/1000);
   last=now;
   gameTime+=dt;
   if(running){
-    if(matchState===MATCH_STATE.ROUND_END && roundRestartAt && gameTime>=roundRestartAt){
+    if(!onlineMode && matchState===MATCH_STATE.ROUND_END && roundRestartAt && gameTime>=roundRestartAt){
       beginNextRound();
-    }else if(matchState===MATCH_STATE.MATCH_END && matchEndAt && gameTime>=matchEndAt){
+    }else if(!onlineMode && matchState===MATCH_STATE.MATCH_END && matchEndAt && gameTime>=matchEndAt){
       enterLobby();
     }
 
@@ -2010,11 +3091,16 @@ function loop(now){
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
+      updateRemotePlayers(dt);
       updateProjectiles(dt);
       updateBloodFx(dt);
       checkRoundEnd();
+    }else if(onlineMode){
+      updateRemotePlayers(dt);
+      updateBloodFx(dt);
     }
   }
+  onlineTick();
   renderWorld();
   requestAnimationFrame(loop);
 }
