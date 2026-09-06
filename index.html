@@ -204,7 +204,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-06 FREELOOK AIM</div>
+<div id="buildBadge">BUILD 2026-09-06 VERTICAL FREELOOK</div>
 
 
 <canvas id="game"></canvas>
@@ -459,7 +459,8 @@ let last = performance.now();
 let gameTime = 0;
 const keys = Object.create(null);
 const moveJoy = {x:0,y:0};
-let recoilPitch = 0;
+let cameraPitch = 0;   // persistent vertical look angle (radians)
+let recoilPitch = 0;   // temporary vertical recoil only
 let recoilKick = 0;
 let recoilSide = 0;
 let muzzleFlash = 0;
@@ -728,6 +729,7 @@ function enterLobby(){
   crouchTouch=false;
   ui.crouch?.classList.remove("on");
   if(ui.spectatorHud) ui.spectatorHud.style.display="none";
+  cameraPitch=0;
   recoilPitch=0;
   recoilKick=0;
   recoilSide=0;
@@ -775,6 +777,7 @@ function beginNextRound(){
   impacts.length=0;
   bloodFx.length=0;
   damageFlash=0;
+  cameraPitch=0;
   recoilPitch=0;
   recoilKick=0;
   recoilSide=0;
@@ -930,6 +933,7 @@ function shoot(shooter,wIndex){
   }
 
     if(wIndex===2 || noRecoil){
+      // Recoil removal must not alter the player's manual vertical view.
       recoilPitch=0;
       recoilKick=0;
       recoilSide=0;
@@ -1432,6 +1436,7 @@ function renderWorld(){
   const cam=viewActor();
   const spectating=!player.alive && cam!==player;
   const camRecoil=spectating?0:recoilPitch;
+  const viewPitch=spectating?0:cameraPitch;
 
   // Camera height in "wall-height units".
   // 0 = floor, 1 = top of a wall. Standing eye height is around 0.50.
@@ -1439,10 +1444,13 @@ function renderWorld(){
   const crouchDrop=spectating?0:(player.crouchBlend*.18);
   const cameraHeight=Math.max(.24,Math.min(.82,.50+jumpHeight-crouchDrop));
 
-  // Horizon stays near screen center. Jumping changes the projected top/bottom
-  // of walls and grounded sprites; landing adds a short physical camera dip.
+  // TRUE vertical free-look:
+  // cameraPitch persists until the player moves the view again.
+  // recoilPitch is a separate temporary kick and can decay / be removed safely.
+  // Positive pitch = looking up, which moves the horizon downward.
+  const pitchOffset=Math.tan(viewPitch)*h*.62;
   const landingOffset=spectating?0:player.landingKick;
-  const horizon = h/2 + camRecoil*h*1.9 + landingOffset;
+  const horizon = h/2 + pitchOffset + camRecoil*h*1.9 + landingOffset;
 
   const sky=ctx.createLinearGradient(0,0,0,horizon);
   sky.addColorStop(0,"#33414d");
@@ -1881,7 +1889,8 @@ if(TOUCH){
     if(Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY)>8) touchDragged=true;
 
     player.a += dx*.0042;
-    recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
+    // Drag up -> look up, drag down -> look down.
+    cameraPitch = Math.max(-1.12, Math.min(1.12, cameraPitch - dy*.0036));
     if(Math.abs(dx)+Math.abs(dy)>.25) lastManualLookAt=performance.now();
     e.preventDefault();
   });
@@ -1961,7 +1970,8 @@ if(!TOUCH){
   addEventListener("mousemove",e=>{
     if(document.pointerLockElement===canvas && player.alive){
       player.a += e.movementX*.0027;
-      recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + e.movementY*.00018));
+      // Mouse up -> look up, mouse down -> look down.
+      cameraPitch = Math.max(-1.12, Math.min(1.12, cameraPitch - e.movementY*.0028));
       if(Math.abs(e.movementX)+Math.abs(e.movementY)>.1) lastManualLookAt=performance.now();
     }
   });
