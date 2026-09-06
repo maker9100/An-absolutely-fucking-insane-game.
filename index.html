@@ -204,7 +204,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-06 2D PROJECTION JUMP</div>
+<div id="buildBadge">BUILD 2026-09-06 FREELOOK AIM</div>
 
 
 <canvas id="game"></canvas>
@@ -451,6 +451,7 @@ let running = false;
 let aimOn = false;
 let espOn = false;
 let noRecoil = false;
+let lastManualLookAt = -9999;
 let scoreB = 0;
 let scoreR = 0;
 let firing = false;
@@ -730,6 +731,7 @@ function enterLobby(){
   recoilPitch=0;
   recoilKick=0;
   recoilSide=0;
+  lastManualLookAt=-9999;
   bolts.length=0;
   impacts.length=0;
   bloodFx.length=0;
@@ -1058,8 +1060,39 @@ function updatePlayer(dt){
   }
 
   if(aimOn){
-    const target=enemyList(0).filter(e=>los(player,e)).sort((a,b)=>dist(player,a)-dist(player,b))[0];
-    if(target) player.a += norm(angle(player,target)-player.a)*Math.min(1,dt*11);
+    // AIM no longer disables manual camera control.
+    // It only assists targets reasonably close to the crosshair.
+    const nowMs=performance.now();
+    const manualActive=(nowMs-lastManualLookAt)<140;
+    const cone=firing ? 0.58 : 0.44;
+
+    let target=null;
+    let targetDelta=Infinity;
+    let bestScore=Infinity;
+
+    for(const e of enemyList(0)){
+      if(!los(player,e)) continue;
+      const da=norm(angle(player,e)-player.a);
+      const absDa=Math.abs(da);
+      if(absDa>cone) continue;
+
+      // Crosshair distance matters much more than physical distance.
+      const score=absDa*4 + dist(player,e)*0.00045;
+      if(score<bestScore){
+        bestScore=score;
+        target=e;
+        targetDelta=da;
+      }
+    }
+
+    if(target){
+      // Manual drag/mouse movement always wins.
+      // AIM becomes stronger while firing and gentler while the user is steering.
+      const pull=firing ? 17 : (manualActive ? 1.6 : 7.5);
+      const maxStep=firing ? 0.085 : (manualActive ? 0.012 : 0.045);
+      const correction=Math.max(-maxStep,Math.min(maxStep,targetDelta*Math.min(1,dt*pull)));
+      player.a += correction;
+    }
   }
 
   recoilPitch *= Math.pow(0.0015, dt);
@@ -1847,10 +1880,9 @@ if(TOUCH){
 
     if(Math.hypot(e.clientX-touchStartX,e.clientY-touchStartY)>8) touchDragged=true;
 
-    if(!aimOn){
-      player.a += dx*.0042;
-      recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
-    }
+    player.a += dx*.0042;
+    recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + dy*.00022));
+    if(Math.abs(dx)+Math.abs(dy)>.25) lastManualLookAt=performance.now();
     e.preventDefault();
   });
 
@@ -1927,9 +1959,10 @@ if(!TOUCH){
     canvas.requestPointerLock?.();
   });
   addEventListener("mousemove",e=>{
-    if(document.pointerLockElement===canvas && player.alive && !aimOn){
+    if(document.pointerLockElement===canvas && player.alive){
       player.a += e.movementX*.0027;
       recoilPitch = Math.max(-.11, Math.min(.16, recoilPitch + e.movementY*.00018));
+      if(Math.abs(e.movementX)+Math.abs(e.movementY)>.1) lastManualLookAt=performance.now();
     }
   });
   addEventListener("mousedown",e=>{if(e.button===0&&running&&player.alive)firing=true});
