@@ -204,7 +204,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-06 2D MOVEMENT + SPECTATOR</div>
+<div id="buildBadge">BUILD 2026-09-06 2D PROJECTION JUMP</div>
 
 
 <canvas id="game"></canvas>
@@ -428,7 +428,7 @@ const player = {
   x:2.5*TILE, y:2.5*TILE, a:0,
   hp:100, team:0, weapon:0, ammo:[30,12,999,6,1,50],
   nextShot:0, kills:0, deaths:0, alive:true,
-  jumpZ:0, jumpVel:0, crouched:false
+  jumpZ:0, jumpVel:0, crouched:false, crouchBlend:0, landingKick:0
 };
 
 
@@ -594,8 +594,9 @@ function viewActor(){
 
 function tryJump(){
   if(!player.alive || matchState!==MATCH_STATE.PLAYING) return;
-  if(player.crouched || player.jumpZ>0.5) return;
-  player.jumpVel=230;
+  if(player.crouched || player.crouchBlend>.15 || player.jumpZ>0.5) return;
+  player.jumpVel=180;
+  player.landingKick=-3;
 }
 
 function setCrouch(on){
@@ -721,6 +722,8 @@ function enterLobby(){
   player.jumpZ=0;
   player.jumpVel=0;
   player.crouched=false;
+  player.crouchBlend=0;
+  player.landingKick=0;
   crouchTouch=false;
   ui.crouch?.classList.remove("on");
   if(ui.spectatorHud) ui.spectatorHud.style.display="none";
@@ -752,6 +755,8 @@ function beginNextRound(){
   player.jumpZ=0;
   player.jumpVel=0;
   player.crouched=false;
+  player.crouchBlend=0;
+  player.landingKick=0;
   crouchTouch=false;
   setSpectateTarget(null);
   ui.crouch?.classList.remove("on");
@@ -1009,8 +1014,6 @@ ui.online.addEventListener("click",()=>notify("ONLINE은 Firebase 연동 경로 
 function updatePlayer(dt){
   if(!player.alive) return;
 
-  // Flat raycaster world: jump/crouch changes camera height and movement feel.
-  // There is no vertical wall collision yet.
   if(!TOUCH){
     const crouchHeld=!!(keys["control"] || keys["c"]);
     setCrouch(crouchHeld);
@@ -1018,13 +1021,31 @@ function updatePlayer(dt){
     setCrouch(crouchTouch);
   }
 
-  if(player.jumpZ>0 || player.jumpVel>0){
+  // Smooth eye-height transition instead of instantly snapping into crouch.
+  const crouchTarget=player.crouched?1:0;
+  player.crouchBlend += (crouchTarget-player.crouchBlend)*Math.min(1,dt*11);
+
+  // Actual jump arc. jumpZ is vertical world displacement used by projection.
+  const wasAirborne=player.jumpZ>0 || player.jumpVel>0;
+  if(wasAirborne){
+    const prevZ=player.jumpZ;
     player.jumpZ += player.jumpVel*dt;
-    player.jumpVel -= 520*dt;
+    player.jumpVel -= 560*dt;
+
     if(player.jumpZ<=0){
       player.jumpZ=0;
       player.jumpVel=0;
+      if(prevZ>0){
+        // Small camera impact on landing; decays below.
+        player.landingKick=14;
+      }
     }
+  }
+
+  // Landing/takeoff camera impulse damping.
+  if(player.landingKick!==0){
+    player.landingKick *= Math.pow(0.006,dt);
+    if(Math.abs(player.landingKick)<.05) player.landingKick=0;
   }
 
   let f=0,s=0;
@@ -1052,7 +1073,11 @@ function updatePlayer(dt){
 
   const l=Math.hypot(f,s);
   if(l>1){f/=l;s/=l;}
-  const speed=player.crouched?86:150;
+
+  // Crouching is slower; air control is slightly weaker than ground movement.
+  let speed=player.crouched?86:150;
+  if(player.jumpZ>0) speed*=.92;
+
   const dx=(Math.cos(player.a)*f+Math.cos(player.a+Math.PI/2)*s)*speed*dt;
   const dy=(Math.sin(player.a)*f+Math.sin(player.a+Math.PI/2)*s)*speed*dt;
   moveEnt(player,dx,dy);
@@ -1374,8 +1399,17 @@ function renderWorld(){
   const cam=viewActor();
   const spectating=!player.alive && cam!==player;
   const camRecoil=spectating?0:recoilPitch;
-  const verticalLift=spectating?0:(player.jumpZ*.18-(player.crouched?22:0));
-  const horizon = h/2 + camRecoil*h*1.9 + verticalLift;
+
+  // Camera height in "wall-height units".
+  // 0 = floor, 1 = top of a wall. Standing eye height is around 0.50.
+  const jumpHeight=spectating?0:(player.jumpZ/(TILE*2.1));
+  const crouchDrop=spectating?0:(player.crouchBlend*.18);
+  const cameraHeight=Math.max(.24,Math.min(.82,.50+jumpHeight-crouchDrop));
+
+  // Horizon stays near screen center. Jumping changes the projected top/bottom
+  // of walls and grounded sprites; landing adds a short physical camera dip.
+  const landingOffset=spectating?0:player.landingKick;
+  const horizon = h/2 + camRecoil*h*1.9 + landingOffset;
 
   const sky=ctx.createLinearGradient(0,0,0,horizon);
   sky.addColorStop(0,"#33414d");
@@ -1393,7 +1427,8 @@ function renderWorld(){
   ctx.strokeStyle="rgba(255,255,255,.045)";
   ctx.lineWidth=1;
   for(let i=1;i<9;i++){
-    const yy=horizon+(h-horizon)*(i*i/81);
+    const eyeScale=Math.max(.55,Math.min(1.45,cameraHeight/.50));
+    const yy=horizon+(h-horizon)*Math.min(1,(i*i/81)*eyeScale);
     ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(w,yy);ctx.stroke();
   }
 
@@ -1409,15 +1444,17 @@ function renderWorld(){
     }
     d*=Math.cos(ra-cam.a);
     const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
+    const wallTop=horizon-wh*(1-cameraHeight);
+    const wallBottom=horizon+wh*cameraHeight;
     const shade=Math.max(35,185-d*.11)|0;
     ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
-    ctx.fillRect(x,horizon-wh/2,step+1,wh);
+    ctx.fillRect(x,wallTop,step+1,wallBottom-wallTop);
     if((Math.floor(x/step)+Math.floor(d/70))%7===0){
       ctx.fillStyle="rgba(255,255,255,.055)";
-      ctx.fillRect(x,horizon-wh/2,1,wh);
+      ctx.fillRect(x,wallTop,1,wallBottom-wallTop);
     }
     ctx.fillStyle="rgba(0,0,0,.12)";
-    ctx.fillRect(x,horizon-wh/2+wh*.49,step+1,2);
+    ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
   }
 
   const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
@@ -1429,7 +1466,7 @@ function renderWorld(){
     const sz=Math.min(h*.72,17000/Math.max(d,1));
 
     if(los(cam,e)){
-      const baseY=horizon+sz*.45;
+      const baseY=horizon+sz*cameraHeight;
       drawSoldierModel(e,sx,baseY,sz);
 
       // Visible-unit health bar is normal HUD, independent of ESP.
@@ -1447,10 +1484,11 @@ function renderWorld(){
     if(espOn && e.team===1){
       ctx.strokeStyle="#ff3939";
       ctx.lineWidth=2;
-      ctx.strokeRect(sx-sz*.26,horizon-sz*.68,sz*.52,sz*1.20);
+      const espBase=horizon+sz*cameraHeight;
+      ctx.strokeRect(sx-sz*.26,espBase-sz*1.16,sz*.52,sz*1.20);
       ctx.fillStyle="white";
       ctx.font="12px Arial";
-      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,horizon-sz*.73);
+      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,espBase-sz*1.21);
     }
   }
 
@@ -1506,9 +1544,12 @@ function renderWorld(){
   const kickY = spectating?0:recoilKick*34;
   const kickX = spectating?0:recoilSide*w*1.7;
   const cx=w/2, cy=h/2;
+  const jumpRatio=spectating?0:Math.min(1,player.jumpZ/30);
+  const verticalVelocity=spectating?0:player.jumpVel;
+  const jumpWeaponDrop=spectating?0:(jumpRatio*h*.018 - verticalVelocity*.010 + player.crouchBlend*h*.010 + player.landingKick*.55);
 
   ctx.save();
-  ctx.translate(kickX,kickY);
+  ctx.translate(kickX,kickY+jumpWeaponDrop);
 
   const poly=(pts,fill,stroke=null)=>{
     ctx.beginPath();
@@ -1723,7 +1764,7 @@ function renderWorld(){
     ui.movementState.textContent=player.crouched
       ? "CROUCHING"
       : player.jumpZ>0
-        ? "JUMPING"
+        ? (player.jumpVel>0 ? "JUMPING ↑" : "FALLING ↓")
         : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
   }
   const wp=WEAPONS[player.weapon];
