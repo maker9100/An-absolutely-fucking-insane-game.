@@ -251,7 +251,7 @@ button{font:inherit}
 <div id="roundHud" class="hidden">
   <div id="roundTitle">ROUND 1</div>
   <div id="roundScore"><span id="blueRounds">0</span> : <span id="redRounds">0</span></div>
-  <div id="roundRule">FIRST TO 5</div>
+  <div id="roundRule">FIRST TO 7</div>
 </div>
 <div id="damageOverlay"></div>
 <div id="lowHpOverlay"></div>
@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 OPERATION LEGS</div>
+<div id="buildBadge">BUILD 2026-09-07 7-WIN TACTICAL BUNKERS</div>
 
 
 <canvas id="game"></canvas>
@@ -504,6 +504,15 @@ let blueSpawn=MAPS[0].blue;
 let redSpawn=MAPS[0].red;
 
 
+// Bunker firing-port landmarks on solid wall cells.
+const BUNKER_PORTS=[
+ new Set(["5,3","13,4","8,7","12,11","7,14"]),
+ new Set(["3,2","12,2","6,4","14,5","10,8","15,11"]),
+ new Set(["3,3","14,3","6,4","11,4","9,7","9,12","14,13"]),
+ new Set(["5,3","14,3","9,6","8,8","14,11","3,14"])
+];
+function isBunkerPortCell(cx,cy){return (BUNKER_PORTS[currentMapIndex]||BUNKER_PORTS[0]).has(`${cx},${cy}`);}
+
 const MAP_THEMES = [
   {
     name:"DEPOT",
@@ -600,7 +609,8 @@ function botAt(pos, team, name){
     weapon:load.weapon,role:load.role,idealRange:load.ideal,
     aggression:load.aggression,skill:load.skill,
     aimError:(Math.random()-.5)*.07,aimSettle:0,
-    lastTargetX:0,lastTargetY:0,retreating:false
+    lastTargetX:0,lastTargetY:0,retreating:false,
+    jumpZ:0,jumpVel:0,crouched:false,crouchBlend:0,actionThink:.35+Math.random()*.8,crouchFor:0,idleFor:0,forceMoveFor:0,moveBias:Math.random()<.5?-1:1
   };
 }
 const bots = [];
@@ -665,7 +675,7 @@ let roundNumber = 1;
 let roundOver = false;
 let roundRestartAt = 0;
 let matchEndAt = 0;
-const ROUNDS_TO_WIN = 5;
+const ROUNDS_TO_WIN = 7;
 const MATCH_STATE = Object.freeze({
   LOBBY:"LOBBY",
   PLAYING:"PLAYING",
@@ -1718,6 +1728,16 @@ function updateBots(dt){
     b.think-=dt;
     b.repath-=dt;
     b.aimSettle=Math.min(1,b.aimSettle+dt*(1.4+b.skill*2.2));
+    // Jump/crouch tactical stance AI.
+    b.actionThink-=dt;b.crouchFor=Math.max(0,(b.crouchFor||0)-dt);
+    if(b.actionThink<=0){
+      b.actionThink=.55+Math.random()*1.25;
+      if(sees&&d>115&&Math.random()<.34)b.crouchFor=.32+Math.random()*.72;
+      if((sees||b.stuckFor>.08)&&b.jumpZ<=.01&&Math.random()<.28)b.jumpVel=235+Math.random()*55;
+    }
+    b.crouched=b.crouchFor>0&&b.jumpZ<=.01;
+    if(b.jumpZ>0||b.jumpVel>0){b.jumpVel-=620*dt;b.jumpZ+=b.jumpVel*dt;if(b.jumpZ<=0){b.jumpZ=0;b.jumpVel=0;}}
+    b.crouchBlend+=((b.crouched?1:0)-b.crouchBlend)*Math.min(1,dt*10);
 
     // Low HP bots stop acting suicidal and try to disengage.
     b.retreating=b.hp<28 && d<320;
@@ -1796,6 +1816,16 @@ function updateBots(dt){
 
     const sep=botSeparation(b);
     desiredX+=sep.x*.72;desiredY+=sep.y*.72;
+    // Anti-idle: bots continuously reposition rather than becoming stationary turrets.
+    if(Math.hypot(desiredX,desiredY)<.24){
+      const sideA=faceA+(Math.PI/2)*(b.moveBias||1);
+      desiredX+=Math.cos(sideA)*.52;desiredY+=Math.sin(sideA)*.52;
+    }
+    if((b.forceMoveFor||0)>0){
+      b.forceMoveFor-=dt;
+      const escapeA=b.a+(Math.PI/2)*(b.moveBias||1);
+      desiredX+=Math.cos(escapeA)*.85;desiredY+=Math.sin(escapeA)*.85;
+    }
     const len=Math.hypot(desiredX,desiredY);
     if(len>0){desiredX/=len;desiredY/=len;}
 
@@ -1821,12 +1851,16 @@ function updateBots(dt){
     const moved=moveBotSafe(b,desiredX*requested,desiredY*requested);
 
     if(requested>.2 && moved<requested*.20){
-      b.stuckFor+=dt;
-      if(b.stuckFor>.18){
-        b.repath=0;b.path=[];b.pathIndex=0;b.avoidSide*=-1;b.strafe*=-1;
+      b.stuckFor+=dt;b.idleFor=(b.idleFor||0)+dt;
+      if(b.stuckFor>.18){b.repath=0;b.path=[];b.pathIndex=0;b.avoidSide*=-1;b.strafe*=-1;}
+      if(b.idleFor>.42){
+        b.moveBias*=-1;b.forceMoveFor=.55;b.repath=0;b.path=[];b.pathIndex=0;
+        if(b.jumpZ<=.01)b.jumpVel=255;
+        b.idleFor=0;
       }
     }else{
       b.stuckFor=Math.max(0,b.stuckFor-dt*2.5);
+      b.idleFor=Math.max(0,(b.idleFor||0)-dt*3);
     }
 
     const frameMove=Math.hypot(b.x-b.lastX,b.y-b.lastY);
@@ -2200,6 +2234,14 @@ function renderWorld(){
     }
     ctx.fillStyle="rgba(0,0,0,.13)";
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
+    // Recessed bunker firing slit with a dark gun barrel.
+    const hitCX=Math.floor((cam.x+Math.cos(ra)*d)/TILE),hitCY=Math.floor((cam.y+Math.sin(ra)*d)/TILE);
+    if(isBunkerPortCell(hitCX,hitCY)&&wallBottom-wallTop>42){
+      const py=wallTop+(wallBottom-wallTop)*.43,ph=Math.max(5,(wallBottom-wallTop)*.12);
+      ctx.fillStyle="#0c0f10";ctx.fillRect(x,py,step+1,ph);
+      ctx.fillStyle="#42494d";ctx.fillRect(x,py+ph*.42,step+1,Math.max(2,ph*.24));
+      if((x%(step*7))<step){ctx.fillStyle="#171a1c";ctx.fillRect(x,py+ph*.36,Math.max(6,step+3),Math.max(3,ph*.34));}
+    }
   }
 
   const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
