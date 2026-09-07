@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 AI JUMP FIXED</div>
+<div id="buildBadge">BUILD 2026-09-07 HEALTH ORBS</div>
 
 
 <canvas id="game"></canvas>
@@ -498,6 +498,39 @@ const MAPS = [
 ];
 
 let currentMapIndex=0;
+
+const HEALTH_ORB_HEAL=10, HEALTH_ORB_RESPAWN=9;
+let healthOrbs=[];
+function resetHealthOrbs(){
+  const spots=[];
+  for(let y=2;y<MAP.length-2;y++)for(let x=2;x<MAP[y].length-2;x++){
+    if(MAP[y][x]==="." && ((x*7+y*11+currentMapIndex*5)%23===0))
+      spots.push([x,y]);
+  }
+  const chosen=spots.slice(0,3);
+  healthOrbs=chosen.map(([x,y],i)=>({x:(x+.5)*TILE,y:(y+.5)*TILE,active:true,respawn:0,phase:i*2.1}));
+}
+function healWithOrb(e,o){
+  if(!e||!e.alive||!o.active||e.hp>=100)return false;
+  e.hp=Math.min(100,e.hp+HEALTH_ORB_HEAL);
+  o.active=false;o.respawn=HEALTH_ORB_RESPAWN;
+  if(e===player)showToast?.("HP +10");
+  return true;
+}
+function updateHealthOrbs(dt){
+  if(!healthOrbs.length)resetHealthOrbs();
+  for(const o of healthOrbs){
+    if(!o.active){o.respawn-=dt;if(o.respawn<=0){o.active=true;o.respawn=0;}continue;}
+    if(player.alive&&dist(player,o)<24)healWithOrb(player,o);
+    for(const b of bots){if(b.alive&&dist(b,o)<24){healWithOrb(b,o);break;}}
+  }
+}
+function nearestHealthOrb(e){
+  let best=null,bd=Infinity;
+  for(const o of healthOrbs){if(!o.active)continue;const d=dist(e,o);if(d<bd){bd=d;best=o;}}
+  return best?{orb:best,d:bd}:null;
+}
+
 let MAP=MAPS[0].grid;
 let playerSpawn=MAPS[0].player;
 let blueSpawn=MAPS[0].blue;
@@ -601,7 +634,8 @@ function botAt(pos, team, name){
     aggression:load.aggression,skill:load.skill,
     aimError:(Math.random()-.5)*.07,aimSettle:0,
     lastTargetX:0,lastTargetY:0,retreating:false,
-    jumpZ:0,jumpVel:0,crouched:false,crouchBlend:0,actionThink:.35+Math.random()*.8,crouchFor:0,idleFor:0,forceMoveFor:0,moveBias:Math.random()<.5?-1:1,jumpCooldown:1.8+Math.random()*2.4,stuckJumpCooldown:2.5
+    jumpZ:0,jumpVel:0,crouched:false,crouchBlend:0,actionThink:.35+Math.random()*.8,crouchFor:0,idleFor:0,forceMoveFor:0,moveBias:Math.random()<.5?-1:1,jumpCooldown:1.8+Math.random()*2.4,stuckJumpCooldown:2.5,
+    alertTarget:null,alertTime:0,noSightFor:0,huntRush:0,lastSeenX:pos[0]*TILE,lastSeenY:pos[1]*TILE
   };
 }
 const bots = [];
@@ -1221,7 +1255,7 @@ function beginNextRound(){
 function startMatch(){
   onlineMode=false;
   rebuildAIBots();
-  currentMapIndex=Math.floor(Math.random()*MAPS.length);
+  currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];
   applyMap(currentMapIndex);
   resetMatchScore();
   setMatchUi(true);
@@ -1277,6 +1311,12 @@ function checkRoundEnd(){
 
 function damageTarget(target,amount,shooter){
   if(!target||!target.alive)return;
+  if(target!==player && shooter && target.team!==shooter.team){
+    target.alertTarget=shooter;
+    target.alertTime=2.2;
+    target.noSightFor=0;
+    target.huntRush=Math.max(target.huntRush||0,1.2);
+  }
   if(onlineMode&&shooter===player&&target.remote){
     spawnBlood(target);const predictedKill=(target.hp-amount)<=0;confirmHit(amount,false);if(predictedKill)hitMarkerKill=true;target.hp=Math.max(0,target.hp-amount);sendOnlineDamage(target.uid,amount,player.weapon);return;
   }
@@ -1662,15 +1702,45 @@ function updateRemotePlayers(dt){
   }
 }
 
+function botCanNotice(b,e){
+  if(!e||!e.alive||!los(b,e)) return false;
+  const d=dist(b,e);
+  const da=Math.abs(norm(angle(b,e)-b.a));
+  // 150° normal FOV, wider peripheral awareness at close range.
+  if(da<=1.31) return true;
+  if(d<175 && da<=2.10) return true;
+  return d<82; // point-blank: don't pretend not to see someone beside you
+}
+
 function chooseBotTarget(b,enemies){
+  // 1) Someone who just damaged us gets immediate priority while still alive.
+  if(b.alertTime>0 && b.alertTarget && b.alertTarget.alive &&
+     b.alertTarget.team!==b.team && los(b,b.alertTarget)){
+    return b.alertTarget;
+  }
+
+  // 2) Any enemy actually visible in the bot's view is more important than
+  // an "ideal-range" enemy behind a wall.
+  const noticed=enemies.filter(e=>botCanNotice(b,e));
+  if(noticed.length){
+    let best=null,bestScore=Infinity;
+    for(const e of noticed){
+      const d=dist(b,e);
+      const da=Math.abs(norm(angle(b,e)-b.a));
+      const wounded=(100-Math.max(0,e.hp||100))/100;
+      const threat=e===player?.22:0;
+      const score=d/900 + da*.58 - wounded*.28 - threat;
+      if(score<bestScore){bestScore=score;best=e;}
+    }
+    return best;
+  }
+
+  // 3) No visual contact: hunt the nearest sensible enemy rather than
+  // oscillating between role-based range preferences.
   let best=null,bestScore=Infinity;
   for(const e of enemies){
     const d=dist(b,e);
-    const visible=los(b,e);
-    const rangePenalty=Math.abs(d-b.idealRange)/Math.max(120,b.idealRange);
-    const wounded=(100-Math.max(0,e.hp||100))/100;
-    const playerThreat=e===player?.18:0;
-    const score=rangePenalty*1.7 + d/1500 - wounded*.34 - playerThreat - (visible?.55:0);
+    const score=d - (e===player?24:0);
     if(score<bestScore){bestScore=score;best=e;}
   }
   return best;
@@ -1715,7 +1785,18 @@ function updateBots(dt){
     if(!t) continue;
 
     const sees=los(b,t);
+    const notices=botCanNotice(b,t);
     const d=dist(b,t);
+    b.alertTime=Math.max(0,(b.alertTime||0)-dt);
+    if(b.alertTarget && (!b.alertTarget.alive || b.alertTarget.team===b.team)) b.alertTarget=null;
+    b.huntRush=Math.max(0,(b.huntRush||0)-dt);
+    if(sees){
+      b.noSightFor=0;
+      b.lastSeenX=t.x;b.lastSeenY=t.y;
+    }else{
+      b.noSightFor=(b.noSightFor||0)+dt;
+      if(b.noSightFor>1.1) b.huntRush=Math.max(b.huntRush,1.0);
+    }
     b.think-=dt;
     b.repath-=dt;
     b.aimSettle=Math.min(1,b.aimSettle+dt*(1.4+b.skill*2.2));
@@ -1727,11 +1808,6 @@ function updateBots(dt){
     if(b.actionThink<=0){
       b.actionThink=.65+Math.random()*1.35;
       if(sees&&d>115&&Math.random()<.28)b.crouchFor=.32+Math.random()*.62;
-      // Tactical jump: occasional only, never bunny-hop.
-      if(sees&&d>140&&b.jumpZ<=.01&&b.jumpCooldown<=0&&Math.random()<.10){
-        b.jumpVel=0;
-        b.jumpCooldown=2.8+Math.random()*2.8;
-      }
     }
     b.crouched=b.crouchFor>0&&b.jumpZ<=.01;
     if(b.jumpZ>0||b.jumpVel>0){b.jumpVel-=620*dt;b.jumpZ+=b.jumpVel*dt;if(b.jumpZ<=0){b.jumpZ=0;b.jumpVel=0;}}
@@ -1753,16 +1829,29 @@ function updateBots(dt){
       b.targetUid=t.uid||t.name;
       b.targetCell=targetCell;
       b.repath=0;
-      b.aimSettle=0;
+      // Visible target acquisition should be quick; unseen hunt targets can settle normally.
+      b.aimSettle=notices ? Math.max(b.aimSettle,.55+b.skill*.25) : 0;
+      if(notices){
+        b.lastSeenX=t.x;b.lastSeenY=t.y;
+        b.huntRush=Math.max(b.huntRush,.65);
+      }
     }
 
-    if(!sees && (b.repath<=0 || b.pathIndex>=b.path.length)){
+    if(!sees && (b.repath<=0 || b.pathIndex>=b.path.length || b.huntRush>0)){
       b.path=botPathfind(b.x,b.y,t.x,t.y);
       b.pathIndex=0;
-      b.repath=BOT_REPATH_MIN+Math.random()*(BOT_REPATH_MAX-BOT_REPATH_MIN);
+      b.repath=b.huntRush>0 ? .12+Math.random()*.10 :
+        BOT_REPATH_MIN+Math.random()*(BOT_REPATH_MAX-BOT_REPATH_MIN);
     }
 
     let desiredX=0,desiredY=0;
+    const healPick=b.hp<=55?nearestHealthOrb(b):null;
+    if(healPick&&healPick.d<520&&!(sees&&d<150)){
+      const ha=angle(b,healPick.orb);
+      desiredX+=Math.cos(ha)*.92;desiredY+=Math.sin(ha)*.92;
+      b.huntRush=Math.max(b.huntRush,.35);
+    }
+
     let faceA=angle(b,t);
 
     if(b.retreating){
@@ -1841,10 +1930,16 @@ function updateBots(dt){
       b.lastTargetX=t.x;b.lastTargetY=t.y;
     }
 
-    const turnRate=sees?(4.6+b.skill*4.4):5.0;
+    // Once an enemy enters view, react decisively instead of slowly looking past them.
+    const turnRate=notices?(8.2+b.skill*5.8):(sees?(6.2+b.skill*4.6):5.8);
     b.a+=norm(faceA-b.a)*Math.min(1,dt*turnRate);
 
-    const wantedSpeed=b.retreating?BOT_SPEED*1.08:BOT_SPEED;
+    if(!sees && b.huntRush>0 && Math.hypot(desiredX,desiredY)<.35){
+      const chaseA=angle(b,t);
+      desiredX=Math.cos(chaseA);desiredY=Math.sin(chaseA);
+    }
+
+    const wantedSpeed=b.retreating?BOT_SPEED*1.08:(b.huntRush>0?BOT_SPEED*1.12:BOT_SPEED);
     const requested=wantedSpeed*dt;
     const moved=moveBotSafe(b,desiredX*requested,desiredY*requested);
 
@@ -1853,12 +1948,6 @@ function updateBots(dt){
       if(b.stuckFor>.18){b.repath=0;b.path=[];b.pathIndex=0;b.avoidSide*=-1;b.strafe*=-1;}
       if(b.idleFor>.42){
         b.moveBias*=-1;b.forceMoveFor=.55;b.repath=0;b.path=[];b.pathIndex=0;
-        // Jump is last-resort stuck recovery, with a long cooldown.
-        if(b.jumpZ<=.01&&b.stuckJumpCooldown<=0){
-          b.jumpVel=0;
-          b.stuckJumpCooldown=3.5;
-          b.jumpCooldown=Math.max(b.jumpCooldown||0,2.8);
-        }
         b.idleFor=0;
       }
     }else{
@@ -2239,6 +2328,28 @@ function renderWorld(){
     }
     ctx.fillStyle="rgba(0,0,0,.13)";
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
+  }
+
+
+  // Floating green HP +10 pickups.
+  for(const o of healthOrbs){
+    if(!o.active)continue;
+    const dx=o.x-cam.x,dy=o.y-cam.y,od=Math.hypot(dx,dy);
+    const oa=norm(Math.atan2(dy,dx)-viewAngle);
+    if(Math.abs(oa)>FOV*.62||od<10)continue;
+    const cd=od*Math.cos(oa);if(cd<=1)continue;
+    const ox=w/2+(Math.tan(oa)/Math.tan(FOV/2))*w/2;
+    const os=Math.max(8,Math.min(46,(h*24)/cd));
+    const oy=horizon+(h*TILE/Math.max(cd,1))*.18-Math.sin(gameTime*3.2+o.phase)*os*.18;
+    ctx.save();
+    ctx.globalAlpha=.24;ctx.fillStyle="#38ff72";
+    ctx.beginPath();ctx.arc(ox,oy,os*.78,0,TWO_PI);ctx.fill();
+    ctx.globalAlpha=1;ctx.fillStyle="#18d85a";
+    ctx.beginPath();ctx.arc(ox,oy,os*.48,0,TWO_PI);ctx.fill();
+    ctx.fillStyle="#effff3";
+    ctx.fillRect(ox-os*.08,oy-os*.29,os*.16,os*.58);
+    ctx.fillRect(ox-os*.29,oy-os*.08,os*.58,os*.16);
+    ctx.restore();
   }
 
   const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
@@ -3404,7 +3515,9 @@ function loop(now){
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
-      updateRemotePlayers(dt);
+      
+    updateHealthOrbs(dt);
+updateRemotePlayers(dt);
       updateProjectiles(dt);
       updateBloodFx(dt);
       checkRoundEnd();
