@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 COMBAT POLISH</div>
+<div id="buildBadge">BUILD 2026-09-07 FIREBASE READY</div>
 
 
 <canvas id="game"></canvas>
@@ -322,7 +322,7 @@ button{font:inherit}
 <div id="onlineOverlay">
   <div id="onlineCard">
     <h2>CHEAT ARENA ONLINE</h2>
-    <div class="onlineTiny">Firebase Realtime Database · 최대 10명 · BLUE 5 vs RED 5 · 2명부터 테스트 시작 가능</div>
+    <div class="onlineTiny">Firebase Realtime Database · 최대 10명 · BLUE 5 vs RED 5</div>
 
     <div id="onlineHome">
       <h3>접속</h3>
@@ -335,24 +335,6 @@ button{font:inherit}
         </div>
       </div>
       <button id="closeOnline" class="onlineBtn" style="width:100%;margin-top:8px">메인 메뉴</button>
-
-      <div id="onlineConfigPanel">
-        <h3>Firebase 설정</h3>
-        <div class="onlineTiny">처음 한 번만 Firebase Console의 웹 앱 <b>firebaseConfig</b>를 붙여넣으면 브라우저에 저장된다. 서비스 계정/private key는 넣지 말 것.</div>
-        <textarea id="firebaseConfigInput" class="onlineText" spellcheck="false" placeholder='const firebaseConfig = {
-  apiKey: "...",
-  authDomain: "...",
-  databaseURL: "...",
-  projectId: "...",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "..."
-};'></textarea>
-        <div class="onlineGrid" style="margin-top:7px">
-          <button id="saveFirebaseConfig" class="onlineBtn">Firebase 설정 저장</button>
-          <button id="clearFirebaseConfig" class="onlineBtn danger">설정 지우기</button>
-        </div>
-      </div>
     </div>
 
     <div id="onlineRoom" class="hidden">
@@ -2563,8 +2545,8 @@ ui.noRecoil?.addEventListener("click",toggleNoRecoil);
    - shooter sends damage event, victim owns HP
    - host owns round state
 ========================================================= */
-const FIREBASE_CONFIG_KEY="cheatArena.firebaseConfig.v1";
 const ONLINE_NAME_KEY="cheatArena.nickname.v1";
+const EMBEDDED_FIREBASE_CONFIG={"apiKey":"AIzaSyBvPSBiiRPXJ0-02grd_JEq8ieFdz0hsS4","authDomain":"gungaym-81da0.firebaseapp.com","databaseURL":"https://gungaym-81da0-default-rtdb.firebaseio.com","projectId":"gungaym-81da0","storageBucket":"gungaym-81da0.firebasestorage.app","messagingSenderId":"805083595077","appId":"1:805083595077:web:c0b007034f6d33db7fbe2c","measurementId":"G-5FZJ0K8NF6"};
 
 const online={
   app:null,auth:null,db:null,user:null,mods:null,
@@ -2587,9 +2569,7 @@ function openOnlinePanel(){
   $("onlineRoom").classList.add("hidden");
   const savedName=localStorage.getItem(ONLINE_NAME_KEY);
   if(savedName) $("onlineNickname").value=savedName;
-  const saved=localStorage.getItem(FIREBASE_CONFIG_KEY);
-  $("firebaseConfigInput").value=saved?prettyFirebaseConfig(saved):"";
-  onlineStatus(saved?"Firebase 설정 저장됨 · 방 만들기/참가 가능":"Firebase 설정을 먼저 붙여넣어야 함");
+  onlineStatus("Firebase 연결 준비됨 · 닉네임 입력 후 방 만들기/참가",true);
 }
 
 function closeOnlinePanel(){
@@ -2597,32 +2577,12 @@ function closeOnlinePanel(){
   $("onlineOverlay").classList.remove("show");
 }
 
-function parseFirebaseConfig(text){
-  const keys=["apiKey","authDomain","databaseURL","projectId","storageBucket","messagingSenderId","appId"];
-  const out={};
-  for(const key of keys){
-    const re=new RegExp(key+"\\\\s*:\\\\s*[\\\"']([^\\\"']+)[\\\"']");
-    const m=String(text||"").match(re);
-    if(m) out[key]=m[1].trim();
-  }
-  if(!out.apiKey || !out.databaseURL || !out.projectId){
-    throw new Error("apiKey / databaseURL / projectId를 찾지 못함");
-  }
-  return out;
-}
-function prettyFirebaseConfig(saved){
-  try{
-    const c=JSON.parse(saved);
-    return `const firebaseConfig = ${JSON.stringify(c,null,2)};`;
-  }catch{return saved||""}
-}
 function getFirebaseConfig(){
-  const saved=localStorage.getItem(FIREBASE_CONFIG_KEY);
-  if(!saved) return null;
-  try{return JSON.parse(saved)}catch{return null}
+  return EMBEDDED_FIREBASE_CONFIG;
 }
+
 function configReady(){
-  const c=getFirebaseConfig();
+  const c=EMBEDDED_FIREBASE_CONFIG;
   return !!(c?.apiKey && c?.databaseURL && c?.projectId);
 }
 
@@ -3198,23 +3158,6 @@ function formatFirebaseError(err){
   return String(err?.message||err||"Firebase 오류");
 }
 
-$("saveFirebaseConfig").addEventListener("click",async()=>{
-  try{
-    const cfg=parseFirebaseConfig($("firebaseConfigInput").value);
-    localStorage.setItem(FIREBASE_CONFIG_KEY,JSON.stringify(cfg));
-    if(online.app && online.mods?.deleteApp){
-      try{await online.mods.deleteApp(online.app)}catch{}
-      online.app=null;online.auth=null;online.db=null;online.user=null;
-      online.connectionLabel="OFFLINE";
-    }
-    onlineStatus("Firebase 설정 저장 완료 · 이제 방 만들기/참가 가능",true);
-  }catch(err){onlineStatus("설정 오류: "+err.message)}
-});
-$("clearFirebaseConfig").addEventListener("click",()=>{
-  localStorage.removeItem(FIREBASE_CONFIG_KEY);
-  $("firebaseConfigInput").value="";
-  onlineStatus("Firebase 설정 삭제됨");
-});
 $("closeOnline").addEventListener("click",closeOnlinePanel);
 $("createOnlineRoom").addEventListener("click",createOnlineRoom);
 $("joinOnlineRoom").addEventListener("click",joinOnlineRoom);
