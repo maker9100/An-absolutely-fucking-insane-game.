@@ -156,6 +156,10 @@ button{font:inherit}
 }
 #roundTitle{font:800 13px Arial;letter-spacing:.08em}
 #roundScore{font:900 21px Arial;margin-top:2px}
+#roundTimer{font:900 17px monospace;margin-top:2px;color:#f3f3f3;letter-spacing:.05em}
+#roundTimer.urgent{color:#ff6b5f;animation:timerPulse .55s steps(2,end) infinite}
+@keyframes timerPulse{50%{opacity:.45}}
+
 #roundRule{font:700 10px Arial;opacity:.65;letter-spacing:.12em;margin-top:1px}
 #damageOverlay{
   position:fixed;inset:0;z-index:49;pointer-events:none;opacity:0;
@@ -260,6 +264,7 @@ button{font:inherit}
 <div id="roundHud" class="hidden">
   <div id="roundTitle">ROUND 1</div>
   <div id="roundScore"><span id="blueRounds">0</span> : <span id="redRounds">0</span></div>
+  <div id="roundTimer">02:00</div>
   <div id="roundRule">FIRST TO 7</div>
 </div>
 <div id="damageOverlay"></div>
@@ -282,7 +287,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 SHIELD + ORBS</div>
+<div id="buildBadge">BUILD 2026-09-07 ROUND TIMER</div>
 
 
 <canvas id="game"></canvas>
@@ -784,6 +789,9 @@ let roundOver = false;
 let roundRestartAt = 0;
 let matchEndAt = 0;
 const ROUNDS_TO_WIN = 7;
+const ROUND_TIME_LIMIT = 120;
+let roundTimeLeft = ROUND_TIME_LIMIT;
+let roundTimerExpired = false;
 const MATCH_STATE = Object.freeze({
   LOBBY:"LOBBY",
   PLAYING:"PLAYING",
@@ -1209,6 +1217,50 @@ function resetEntityForRound(e, spawn){
   if(e!==player) resetBotNavigation(e);
 }
 
+
+function teamTimeoutValue(team){
+  let total=0;
+  const members=[player,...bots].filter(e=>e.team===team&&e.alive);
+  for(const e of members){
+    ensureShieldState(e);
+    total+=Math.max(0,e.hp||0)+Math.max(0,e.shield||0);
+  }
+  return total;
+}
+function resolveRoundTimeout(){
+  if(onlineMode || matchState!==MATCH_STATE.PLAYING || roundOver || roundTimerExpired)return;
+  roundTimerExpired=true;
+  const blueAlive=(player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
+  const redAlive=bots.filter(b=>b.team===1&&b.alive).length;
+  if(blueAlive!==redAlive){
+    finishRound(blueAlive>redAlive?0:1);
+    return;
+  }
+  const blueValue=teamTimeoutValue(0), redValue=teamTimeoutValue(1);
+  if(Math.abs(blueValue-redValue)>.01){
+    finishRound(blueValue>redValue?0:1);
+    return;
+  }
+  // Perfect tie: replay the round without awarding a point.
+  roundOver=true;
+  matchState=MATCH_STATE.ROUND_END;
+  notify("TIME UP · DRAW");
+  roundRestartAt=gameTime+1.6;
+}
+function updateRoundTimer(dt){
+  if(onlineMode || matchState!==MATCH_STATE.PLAYING || roundOver)return;
+  roundTimeLeft=Math.max(0,roundTimeLeft-dt);
+  if(roundTimeLeft<=0) resolveRoundTimeout();
+}
+function renderRoundTimer(){
+  const el=document.getElementById("roundTimer");
+  if(!el)return;
+  const t=Math.max(0,Math.ceil(roundTimeLeft));
+  const m=Math.floor(t/60),s=t%60;
+  el.textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  el.classList.toggle("urgent",matchState===MATCH_STATE.PLAYING&&t<=10);
+}
+
 function updateRoundHud(){
   const br=document.getElementById("blueRounds");
   const rr=document.getElementById("redRounds");
@@ -1240,6 +1292,8 @@ function resetMatchScore(){
   roundNumber=1;
   roundRestartAt=0;
   matchEndAt=0;
+  roundTimeLeft=ROUND_TIME_LIMIT;
+  roundTimerExpired=false;
   scoreB=0;
   scoreR=0;
   player.kills=0;
@@ -1297,6 +1351,8 @@ function beginNextRound(){
   matchState=MATCH_STATE.PLAYING;
   roundRestartAt=0;
   matchEndAt=0;
+  roundTimeLeft=ROUND_TIME_LIMIT;
+  roundTimerExpired=false;
 
   player.hp=100;
   resetEntityShield(player);
@@ -2863,6 +2919,7 @@ function renderWorld(){
 
   const blueAlive=aliveCount(0), redAlive=aliveCount(1);
   ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
+  renderRoundTimer();
   const omb=$("onlineMatchBanner");
   if(omb){
     omb.style.display=onlineMode&&running?"block":"none";
@@ -3734,6 +3791,7 @@ function loop(now){
     }
 
     if(matchState===MATCH_STATE.PLAYING){
+      updateRoundTimer(dt);
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
