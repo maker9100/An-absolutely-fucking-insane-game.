@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 FIREBASE READY</div>
+<div id="buildBadge">BUILD 2026-09-07 TACTICAL AI + COLOR MAPS</div>
 
 
 <canvas id="game"></canvas>
@@ -503,6 +503,49 @@ let playerSpawn=MAPS[0].player;
 let blueSpawn=MAPS[0].blue;
 let redSpawn=MAPS[0].red;
 
+
+const MAP_THEMES = [
+  {
+    name:"DEPOT",
+    skyTop:"#7ea4bd", skyBottom:"#d8d5bc",
+    floorNear:"#57544c", floorFar:"#232522",
+    wall:"#a68f72", wallDark:"#5d5143",
+    accent:"#d8a33b", stripe:"#384b58"
+  },
+  {
+    name:"CARGO YARD",
+    skyTop:"#5e8fb0", skyBottom:"#c8d3d7",
+    floorNear:"#4a5558", floorFar:"#202629",
+    wall:"#78858a", wallDark:"#3b4549",
+    accent:"#e2743d", stripe:"#d8b83e"
+  },
+  {
+    name:"LAB WING",
+    skyTop:"#6a8790", skyBottom:"#d5e0db",
+    floorNear:"#48545a", floorFar:"#1b2226",
+    wall:"#d1d7d3", wallDark:"#687174",
+    accent:"#3fa7a0", stripe:"#d86f43"
+  },
+  {
+    name:"CENTRAL PLAZA",
+    skyTop:"#78a8c7", skyBottom:"#e5d4b4",
+    floorNear:"#6b6559", floorFar:"#292723",
+    wall:"#c6aa7e", wallDark:"#6e5c43",
+    accent:"#3f86a8", stripe:"#b84f3f"
+  }
+];
+
+function currentTheme(){
+  return MAP_THEMES[currentMapIndex]||MAP_THEMES[0];
+}
+function mixHex(a,b,t){
+  const p=s=>parseInt(s,16);
+  const ar=p(a.slice(1,3)),ag=p(a.slice(3,5)),ab=p(a.slice(5,7));
+  const br=p(b.slice(1,3)),bg=p(b.slice(3,5)),bb=p(b.slice(5,7));
+  const m=(x,y)=>Math.max(0,Math.min(255,Math.round(x+(y-x)*t))).toString(16).padStart(2,"0");
+  return `#${m(ar,br)}${m(ag,bg)}${m(ab,bb)}`;
+}
+
 function applyMap(index){
   const next=MAPS[index];
   if(!next) return;
@@ -537,18 +580,33 @@ const BOT_SPEED=88;
 const BOT_REPATH_MIN=.22;
 const BOT_REPATH_MAX=.42;
 
+const BOT_LOADOUTS = [
+  {weapon:0,role:"RIFLE",ideal:280,aggression:.58,skill:.76},
+  {weapon:3,role:"BREACHER",ideal:150,aggression:.82,skill:.68},
+  {weapon:4,role:"MARKSMAN",ideal:430,aggression:.42,skill:.88},
+  {weapon:5,role:"SUPPRESSOR",ideal:310,aggression:.62,skill:.66},
+  {weapon:1,role:"SKIRMISHER",ideal:230,aggression:.70,skill:.80}
+];
+
+let botSerial=0;
 function botAt(pos, team, name){
+  const load=BOT_LOADOUTS[botSerial++%BOT_LOADOUTS.length];
   return {
     x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true,
     strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI,
     path:[],pathIndex:0,repath:0,targetUid:null,targetCell:"",
     stuckFor:0,lastX:pos[0]*TILE,lastY:pos[1]*TILE,
-    avoidSide:Math.random()<.5?-1:1
+    avoidSide:Math.random()<.5?-1:1,
+    weapon:load.weapon,role:load.role,idealRange:load.ideal,
+    aggression:load.aggression,skill:load.skill,
+    aimError:(Math.random()-.5)*.07,aimSettle:0,
+    lastTargetX:0,lastTargetY:0,retreating:false
   };
 }
 const bots = [];
 function rebuildAIBots(){
   bots.length=0;
+  botSerial=0;
   bots.push(
     botAt(blueSpawn[0],0,"BLUE-2"),
     botAt(blueSpawn[1],0,"BLUE-3"),
@@ -864,6 +922,9 @@ function resetBotNavigation(b){
   b.lastX=b.x;
   b.lastY=b.y;
   b.avoidSide=Math.random()<.5?-1:1;
+  b.aimError=(Math.random()-.5)*.06;
+  b.aimSettle=0;
+  b.retreating=false;
 }
 
 function los(a,b){
@@ -1271,16 +1332,20 @@ function pelletTarget(shooter,range,rayAngle){
 }
 
 function fireBolt(shooter,w){
-  const speed=620;
+  // Faster bolt + swept collision in updateProjectiles.
+  // This fixes the old "passed through the target between frames" problem.
+  const speed=760;
+  const a=shooter.a;
   bolts.push({
-    x:shooter.x+Math.cos(shooter.a)*18,
-    y:shooter.y+Math.sin(shooter.a)*18,
-    vx:Math.cos(shooter.a)*speed,
-    vy:Math.sin(shooter.a)*speed,
+    x:shooter.x+Math.cos(a)*18,
+    y:shooter.y+Math.sin(a)*18,
+    vx:Math.cos(a)*speed,
+    vy:Math.sin(a)*speed,
     team:shooter===player?player.team:shooter.team,
     owner:shooter,
     life:1.7,
-    damage:w.damage
+    damage:w.damage,
+    radius:18
   });
 }
 
@@ -1526,16 +1591,35 @@ function updateBloodFx(dt){
   }
 }
 
+function segmentCircleHit(x1,y1,x2,y2,cx,cy,r){
+  const dx=x2-x1,dy=y2-y1;
+  const len2=dx*dx+dy*dy||1;
+  let t=((cx-x1)*dx+(cy-y1)*dy)/len2;
+  t=Math.max(0,Math.min(1,t));
+  const px=x1+dx*t,py=y1+dy*t;
+  const ox=cx-px,oy=cy-py;
+  return ox*ox+oy*oy<=r*r;
+}
+
 function updateProjectiles(dt){
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
   for(let i=bolts.length-1;i>=0;i--){
     const b=bolts[i];
     b.life-=dt;
     const ox=b.x, oy=b.y;
-    b.x+=b.vx*dt;
-    b.y+=b.vy*dt;
+    const nx=b.x+b.vx*dt, ny=b.y+b.vy*dt;
 
-    if(b.life<=0 || wall(b.x,b.y)){
+    // Sweep through the entire travelled segment so low FPS cannot skip targets.
+    const travel=Math.hypot(nx-ox,ny-oy);
+    const steps=Math.max(1,Math.ceil(travel/6));
+    let wallHit=false;
+    for(let s=1;s<=steps;s++){
+      const t=s/steps;
+      if(wall(ox+(nx-ox)*t,oy+(ny-oy)*t)){wallHit=true;break;}
+    }
+
+    if(b.life<=0 || wallHit){
+      b.x=nx;b.y=ny;
       impacts.push({x:b.x,y:b.y,life:.35});
       bolts.splice(i,1);
       continue;
@@ -1544,14 +1628,19 @@ function updateProjectiles(dt){
     const targets=allEntities().filter(e=>e.alive && e.team!==b.team && e!==b.owner);
     let hit=null;
     for(const t of targets){
-      if(Math.hypot(t.x-b.x,t.y-b.y)<14){hit=t;break;}
+      if(segmentCircleHit(ox,oy,nx,ny,t.x,t.y,b.radius||18)){
+        hit=t;break;
+      }
     }
+
+    b.x=nx;b.y=ny;
     if(hit){
       damageTarget(hit,b.damage,b.owner);
       impacts.push({x:b.x,y:b.y,life:.28});
       bolts.splice(i,1);
     }
   }
+
   for(let i=impacts.length-1;i>=0;i--){
     impacts[i].life-=dt;
     if(impacts[i].life<=0) impacts.splice(i,1);
@@ -1572,6 +1661,46 @@ function updateRemotePlayers(dt){
   }
 }
 
+function chooseBotTarget(b,enemies){
+  let best=null,bestScore=Infinity;
+  for(const e of enemies){
+    const d=dist(b,e);
+    const visible=los(b,e);
+    const rangePenalty=Math.abs(d-b.idealRange)/Math.max(120,b.idealRange);
+    const wounded=(100-Math.max(0,e.hp||100))/100;
+    const playerThreat=e===player?.18:0;
+    const score=rangePenalty*1.7 + d/1500 - wounded*.34 - playerThreat - (visible?.55:0);
+    if(score<bestScore){bestScore=score;best=e;}
+  }
+  return best;
+}
+
+function botWeaponForRange(b,d){
+  // Knife only as emergency melee. Otherwise bots keep distinctive primary roles.
+  if(d<58) return 2;
+  if(b.role==="BREACHER" && d>340) return 1;
+  if(b.role==="MARKSMAN" && d<115) return 1;
+  return b.weapon;
+}
+
+function findBotRetreatPoint(b,threat){
+  const ta=angle(threat,b);
+  const candidates=[];
+  for(let i=-2;i<=2;i++){
+    const a=ta+i*.55;
+    for(const len of [80,120,160]){
+      const x=b.x+Math.cos(a)*len,y=b.y+Math.sin(a)*len;
+      if(!circleHitsWall(x,y,BOT_RADIUS)){
+        let score=dist({x,y},threat);
+        if(!los({x,y},threat)) score+=150;
+        candidates.push({x,y,score});
+      }
+    }
+  }
+  candidates.sort((a,z)=>z.score-a.score);
+  return candidates[0]||null;
+}
+
 function updateBots(dt){
   if(onlineMode) return;
 
@@ -1581,21 +1710,23 @@ function updateBots(dt){
     const enemies=enemyList(b.team).filter(e=>e!==b);
     if(!enemies.length) continue;
 
-    // Target the closest visible enemy first; otherwise the closest enemy.
-    let visible=enemies.filter(e=>los(b,e));
-    visible.sort((a,z)=>dist(b,a)-dist(b,z));
-    enemies.sort((a,z)=>dist(b,a)-dist(b,z));
-    const t=(visible[0]||enemies[0]);
-    const sees=visible.includes(t);
-    const d=dist(b,t);
+    const t=chooseBotTarget(b,enemies);
+    if(!t) continue;
 
+    const sees=los(b,t);
+    const d=dist(b,t);
     b.think-=dt;
     b.repath-=dt;
+    b.aimSettle=Math.min(1,b.aimSettle+dt*(1.4+b.skill*2.2));
+
+    // Low HP bots stop acting suicidal and try to disengage.
+    b.retreating=b.hp<28 && d<320;
 
     if(b.think<=0){
-      b.think=.35+Math.random()*.45;
-      if(Math.random()<.34) b.strafe*=-1;
-      if(Math.random()<.22) b.avoidSide*=-1;
+      b.think=.28+Math.random()*.36;
+      if(Math.random()<.28) b.strafe*=-1;
+      if(Math.random()<.18) b.avoidSide*=-1;
+      b.aimError=(Math.random()-.5)*(0.12*(1-b.skill)+.018);
     }
 
     const targetCell=`${Math.floor(t.x/TILE)},${Math.floor(t.y/TILE)}`;
@@ -1604,9 +1735,9 @@ function updateBots(dt){
       b.targetUid=t.uid||t.name;
       b.targetCell=targetCell;
       b.repath=0;
+      b.aimSettle=0;
     }
 
-    // When no direct route exists, use grid navigation around walls.
     if(!sees && (b.repath<=0 || b.pathIndex>=b.path.length)){
       b.path=botPathfind(b.x,b.y,t.x,t.y);
       b.pathIndex=0;
@@ -1616,31 +1747,34 @@ function updateBots(dt){
     let desiredX=0,desiredY=0;
     let faceA=angle(b,t);
 
-    if(sees){
-      // Combat movement: keep a sensible rifle distance, strafe, and don't
-      // blindly push into nearby cover.
-      const forward=d>245?1:d<125?-.72:.08;
-      const strafe=b.strafe*(d<420?.62:.34);
+    if(b.retreating){
+      const rp=findBotRetreatPoint(b,t);
+      if(rp){
+        const ra=Math.atan2(rp.y-b.y,rp.x-b.x);
+        desiredX=Math.cos(ra);
+        desiredY=Math.sin(ra);
+      }
+    }else if(sees){
+      const ideal=b.idealRange;
+      const aggression=b.aggression;
+      const forward=d>ideal*1.18 ? (0.55+aggression*.55) :
+                    d<ideal*.62 ? -(0.45+(1-aggression)*.5) : .04;
+      const strafe=b.strafe*(.38+.34*(1-b.skill*.25));
       desiredX=Math.cos(faceA)*forward+Math.cos(faceA+Math.PI/2)*strafe;
       desiredY=Math.sin(faceA)*forward+Math.sin(faceA+Math.PI/2)*strafe;
 
-      // If the direct combat vector would hit a wall, fall back to a path
-      // waypoint instead of rubbing against the obstacle forever.
-      const probe=20;
-      const plen=Math.hypot(desiredX,desiredY)||1;
+      // If movement points into a wall, use pathfinding or a local sidestep.
+      const probe=22,plen=Math.hypot(desiredX,desiredY)||1;
       if(circleHitsWall(b.x+desiredX/plen*probe,b.y+desiredY/plen*probe,BOT_RADIUS)){
         if(b.repath<=0){
           b.path=botPathfind(b.x,b.y,t.x,t.y);
-          b.pathIndex=0;
-          b.repath=.18+Math.random()*.16;
+          b.pathIndex=0;b.repath=.16+Math.random()*.14;
         }
         if(b.path.length){
           const wp=b.path[Math.min(b.pathIndex,b.path.length-1)];
           const wa=Math.atan2(wp.y-b.y,wp.x-b.x);
-          desiredX=Math.cos(wa);
-          desiredY=Math.sin(wa);
+          desiredX=Math.cos(wa);desiredY=Math.sin(wa);
         }else{
-          // Local sidestep if there is no path yet.
           desiredX=Math.cos(faceA+Math.PI/2*b.avoidSide);
           desiredY=Math.sin(faceA+Math.PI/2*b.avoidSide);
         }
@@ -1648,77 +1782,73 @@ function updateBots(dt){
     }else if(b.path.length){
       let wp=b.path[Math.min(b.pathIndex,b.path.length-1)];
       while(wp && Math.hypot(wp.x-b.x,wp.y-b.y)<18){
-        b.pathIndex++;
-        wp=b.path[b.pathIndex];
+        b.pathIndex++;wp=b.path[b.pathIndex];
       }
       if(wp){
         const wa=Math.atan2(wp.y-b.y,wp.x-b.x);
-        desiredX=Math.cos(wa);
-        desiredY=Math.sin(wa);
-        faceA=wa;
-      }else{
-        b.repath=0;
-      }
+        desiredX=Math.cos(wa);desiredY=Math.sin(wa);faceA=wa;
+      }else b.repath=0;
     }else{
-      // Pathfinding failed temporarily: rotate/search in open space, never warp.
-      const a=b.a+(.8*b.avoidSide);
-      desiredX=Math.cos(a)*.35;
-      desiredY=Math.sin(a)*.35;
-      faceA=a;
+      const a=b.a+.8*b.avoidSide;
+      desiredX=Math.cos(a)*.35;desiredY=Math.sin(a)*.35;faceA=a;
       b.repath=0;
     }
 
-    // Don't form one giant blob. Separation is weak enough not to ruin paths.
     const sep=botSeparation(b);
-    desiredX+=sep.x*.72;
-    desiredY+=sep.y*.72;
-
+    desiredX+=sep.x*.72;desiredY+=sep.y*.72;
     const len=Math.hypot(desiredX,desiredY);
-    if(len>0){
-      desiredX/=len;desiredY/=len;
+    if(len>0){desiredX/=len;desiredY/=len;}
+
+    // Aim with role/skill-dependent error, instead of perfect aimbot precision.
+    if(sees){
+      let desiredAim=angle(b,t)+b.aimError*(1-b.aimSettle*.72);
+
+      // Crossbow bots lead slightly at long range based on target displacement.
+      if(b.role==="MARKSMAN" && d>220){
+        const tx=(t.x-(b.lastTargetX||t.x));
+        const ty=(t.y-(b.lastTargetY||t.y));
+        desiredAim=Math.atan2((t.y+ty*4)-b.y,(t.x+tx*4)-b.x)+b.aimError*.45;
+      }
+      faceA=desiredAim;
+      b.lastTargetX=t.x;b.lastTargetY=t.y;
     }
 
-    // Aim at the enemy when visible; otherwise face the waypoint.
-    const turnRate=sees?7.5:5.2;
+    const turnRate=sees?(4.6+b.skill*4.4):5.0;
     b.a+=norm(faceA-b.a)*Math.min(1,dt*turnRate);
 
-    const wantedSpeed=sees?BOT_SPEED:BOT_SPEED*.94;
+    const wantedSpeed=b.retreating?BOT_SPEED*1.08:BOT_SPEED;
     const requested=wantedSpeed*dt;
     const moved=moveBotSafe(b,desiredX*requested,desiredY*requested);
 
-    // Stuck detection: re-path + change avoidance direction. NO position snaps.
     if(requested>.2 && moved<requested*.20){
       b.stuckFor+=dt;
       if(b.stuckFor>.18){
-        b.repath=0;
-        b.path=[];
-        b.pathIndex=0;
-        b.avoidSide*=-1;
-        b.strafe*=-1;
+        b.repath=0;b.path=[];b.pathIndex=0;b.avoidSide*=-1;b.strafe*=-1;
       }
     }else{
       b.stuckFor=Math.max(0,b.stuckFor-dt*2.5);
     }
 
-    // Absolute anti-teleport safety. A bot may never move faster than its
-    // physical speed plus a tiny numerical margin during a normal frame.
     const frameMove=Math.hypot(b.x-b.lastX,b.y-b.lastY);
-    const maxFrameMove=BOT_SPEED*dt*1.20+0.8;
+    const maxFrameMove=BOT_SPEED*dt*1.24+0.8;
     if(frameMove>maxFrameMove && dt<.05){
       const a=Math.atan2(b.y-b.lastY,b.x-b.lastX);
       b.x=b.lastX+Math.cos(a)*maxFrameMove;
       b.y=b.lastY+Math.sin(a)*maxFrameMove;
-      if(circleHitsWall(b.x,b.y,BOT_RADIUS)){
-        b.x=b.lastX;b.y=b.lastY;
-      }
+      if(circleHitsWall(b.x,b.y,BOT_RADIUS)){b.x=b.lastX;b.y=b.lastY;}
       b.repath=0;
     }
     b.lastX=b.x;b.lastY=b.y;
 
-    // Fire only with actual line of sight. Slightly slower than perfect aim.
-    if(sees && d<560){
+    if(sees){
+      const wi=botWeaponForRange(b,d);
+      const weapon=WEAPONS[wi];
       const aimError=Math.abs(norm(angle(b,t)-b.a));
-      if(aimError<.17) shoot(b,0);
+      const fireCone=wi===3?.23:wi===2?.55:wi===4?.055:(.12-(b.skill*.035));
+      const maxRange=weapon?.range||560;
+      if(d<maxRange && aimError<fireCone){
+        shoot(b,wi);
+      }
     }
   }
 }
@@ -1828,78 +1958,60 @@ function drawSoldierModel(e,sx,baseY,sz){
   ctx.fillRect(sx-sz*.125,baseY-sz*.575+bob,sz*.07,sz*.06);
   ctx.fillRect(sx+sz*.125,baseY-sz*.575+bob,sz*.07,sz*.06);
 
-  // rifle in hands
+  // weapon in hands — silhouette changes with the actual loadout
+  const heldWeapon=Number.isFinite(e.weapon)?e.weapon:0;
   ctx.fillStyle=gun;
-  ctx.beginPath();
-  ctx.moveTo(sx-sz*.30,baseY-sz*.64+bob);
-  ctx.lineTo(sx-sz*.20,baseY-sz*.68+bob);
-  ctx.lineTo(sx-sz*.155,baseY-sz*.595+bob);
-  ctx.lineTo(sx-sz*.29,baseY-sz*.57+bob);
-  ctx.closePath();
-  ctx.fill();
 
-  ctx.fillStyle="#394043";
-  ctx.fillRect(sx-sz*.165,baseY-sz*.685+bob,sz*.315,sz*.10);
-  ctx.fillStyle=gunHi;
-  ctx.fillRect(sx+sz*.125,baseY-sz*.66+bob,sz*.255,sz*.047);
-  ctx.fillStyle="#141719";
-  ctx.fillRect(sx+sz*.372,baseY-sz*.648+bob,sz*.11,sz*.02);
-
-  ctx.fillStyle="#181b1d";
-  ctx.beginPath();
-  ctx.moveTo(sx-sz*.04,baseY-sz*.585+bob);
-  ctx.lineTo(sx+sz*.06,baseY-sz*.585+bob);
-  ctx.lineTo(sx+sz*.03,baseY-sz*.43+bob);
-  ctx.lineTo(sx-sz*.055,baseY-sz*.452+bob);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle="#111";
-  ctx.fillRect(sx-sz*.085,baseY-sz*.73+bob,sz*.02,sz*.07);
-  ctx.fillRect(sx+sz*.205,baseY-sz*.715+bob,sz*.018,sz*.07);
-  ctx.fillStyle="#596063";
-  for(let i=0;i<4;i++){
-    ctx.fillRect(sx+sz*(.15+i*.045),baseY-sz*.645+bob,sz*.02,sz*.01);
-  }
-
-  // legs
-  for(const side of [-1,1]){
-    const lx=sx+side*sz*.104;
-    ctx.fillStyle=clothLo;
+  if(heldWeapon===3){ // shotgun
+    ctx.fillRect(sx-sz*.18,baseY-sz*.67+bob,sz*.46,sz*.075);
+    ctx.fillStyle=gunHi;
+    ctx.fillRect(sx+sz*.17,baseY-sz*.655+bob,sz*.26,sz*.035);
+    ctx.fillStyle="#5b3b28";
+    ctx.fillRect(sx-sz*.08,baseY-sz*.625+bob,sz*.15,sz*.055);
+  }else if(heldWeapon===4){ // crossbow
+    ctx.fillStyle="#34383a";
+    ctx.fillRect(sx-sz*.17,baseY-sz*.65+bob,sz*.40,sz*.045);
+    ctx.strokeStyle="#aeb8b8";ctx.lineWidth=Math.max(1,sz*.012);
     ctx.beginPath();
-    ctx.moveTo(lx-side*sz*.075,baseY-sz*.47+bob);
-    ctx.lineTo(lx+side*sz*.065,baseY-sz*.47+bob);
-    ctx.lineTo(lx+side*sz*.055,baseY-sz*.25+bob);
-    ctx.lineTo(lx-side*sz*.06,baseY-sz*.25+bob);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle=armorHi;
-    ctx.fillRect(lx-sz*.057,baseY-sz*.30+bob,sz*.114,sz*.085);
-
-    ctx.fillStyle=clothLo;
+    ctx.moveTo(sx+sz*.06,baseY-sz*.79+bob);
+    ctx.lineTo(sx+sz*.22,baseY-sz*.65+bob);
+    ctx.lineTo(sx+sz*.06,baseY-sz*.51+bob);
+    ctx.stroke();
+    ctx.fillStyle="#aeb8b8";
+    ctx.fillRect(sx+sz*.20,baseY-sz*.663+bob,sz*.28,sz*.012);
+  }else if(heldWeapon===5){ // MAC
+    ctx.fillStyle="#2a2e31";
+    ctx.fillRect(sx-sz*.18,baseY-sz*.69+bob,sz*.42,sz*.12);
+    ctx.fillStyle=gunHi;
+    ctx.fillRect(sx+sz*.20,baseY-sz*.655+bob,sz*.31,sz*.045);
+    ctx.fillStyle="#17191a";
+    ctx.fillRect(sx-sz*.02,baseY-sz*.58+bob,sz*.09,sz*.18);
+  }else if(heldWeapon===1){ // pistol
+    ctx.fillStyle="#2c3032";
+    ctx.fillRect(sx+sz*.02,baseY-sz*.66+bob,sz*.24,sz*.075);
+    ctx.fillRect(sx+sz*.05,baseY-sz*.60+bob,sz*.07,sz*.14);
+  }else if(heldWeapon===2){ // knife
+    ctx.fillStyle="#c7cdd0";
     ctx.beginPath();
-    ctx.moveTo(lx-sz*.056,baseY-sz*.21+bob);
-    ctx.lineTo(lx+sz*.056,baseY-sz*.21+bob);
-    ctx.lineTo(lx+sz*.05,baseY-sz*.03+bob);
-    ctx.lineTo(lx-sz*.05,baseY-sz*.03+bob);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle=boot;
-    ctx.fillRect(lx-sz*.078,baseY-sz*.07+bob,sz*.156,sz*.076);
-    ctx.fillStyle="#32373a";
-    ctx.fillRect(lx-sz*.06,baseY-sz*.066+bob,sz*.12,sz*.018);
+    ctx.moveTo(sx+sz*.06,baseY-sz*.66+bob);
+    ctx.lineTo(sx+sz*.36,baseY-sz*.70+bob);
+    ctx.lineTo(sx+sz*.12,baseY-sz*.61+bob);
+    ctx.closePath();ctx.fill();
+  }else{ // AR
+    ctx.fillStyle=gun;
+    ctx.beginPath();
+    ctx.moveTo(sx-sz*.30,baseY-sz*.64+bob);
+    ctx.lineTo(sx-sz*.20,baseY-sz*.68+bob);
+    ctx.lineTo(sx-sz*.155,baseY-sz*.595+bob);
+    ctx.lineTo(sx-sz*.29,baseY-sz*.57+bob);
+    ctx.closePath();ctx.fill();
+    ctx.fillStyle="#394043";
+    ctx.fillRect(sx-sz*.165,baseY-sz*.685+bob,sz*.315,sz*.10);
+    ctx.fillStyle=gunHi;
+    ctx.fillRect(sx+sz*.125,baseY-sz*.66+bob,sz*.255,sz*.047);
+    ctx.fillStyle="#141719";
+    ctx.fillRect(sx+sz*.372,baseY-sz*.648+bob,sz*.11,sz*.02);
   }
-
-  // neck / head
-  ctx.fillStyle=skin;
-  ctx.fillRect(sx-sz*.07,baseY-sz*1.115+bob,sz*.14,sz*.12);
-
-  ctx.fillStyle=skin;
-  ctx.beginPath();
-  ctx.ellipse(sx,baseY-sz*1.185+bob,sz*.148,sz*.172,0,0,TWO_PI);
-  ctx.fill();
 
   // helmet
   ctx.fillStyle=clothLo;
@@ -1973,17 +2085,26 @@ function renderWorld(){
   const landingOffset=spectating?0:player.landingKick;
   const horizon = h/2 + pitchOffset + camRecoil*h*1.9 + landingOffset + (spectating?0:screenShakeY);
 
+  const theme=currentTheme();
   const sky=ctx.createLinearGradient(0,0,0,horizon);
-  sky.addColorStop(0,"#33414d");
-  sky.addColorStop(1,"#87949b");
+  sky.addColorStop(0,theme.skyTop);
+  sky.addColorStop(1,theme.skyBottom);
   ctx.fillStyle=sky;
   ctx.fillRect(0,0,w,horizon);
 
   const floor=ctx.createLinearGradient(0,horizon,0,h);
-  floor.addColorStop(0,"#42484b");
-  floor.addColorStop(1,"#17191b");
+  floor.addColorStop(0,theme.floorNear);
+  floor.addColorStop(1,theme.floorFar);
   ctx.fillStyle=floor;
   ctx.fillRect(0,horizon,w,h-horizon);
+
+  // Warm/cool map paint zones, inspired by modern competitive FPS readability.
+  ctx.globalAlpha=.11;
+  ctx.fillStyle=theme.accent;
+  ctx.fillRect(0,horizon,w*.34,h-horizon);
+  ctx.fillStyle=theme.stripe;
+  ctx.fillRect(w*.68,horizon,w*.32,h-horizon);
+  ctx.globalAlpha=1;
 
   // subtle floor perspective lines
   ctx.strokeStyle="rgba(255,255,255,.045)";
@@ -2008,14 +2129,24 @@ function renderWorld(){
     const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const wallTop=horizon-wh*(1-cameraHeight);
     const wallBottom=horizon+wh*cameraHeight;
-    const shade=Math.max(35,185-d*.11)|0;
-    ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
+    const depth=Math.max(0,Math.min(1,d/1100));
+    const wallColor=mixHex(theme.wall,theme.wallDark,depth*.82);
+    ctx.fillStyle=wallColor;
     ctx.fillRect(x,wallTop,step+1,wallBottom-wallTop);
+
+    // Painted lower band + occasional colored columns for stronger landmarking.
+    if(wallBottom-wallTop>28){
+      ctx.globalAlpha=.28;
+      ctx.fillStyle=((Math.floor((cam.x+Math.cos(ra)*d)/TILE)+Math.floor((cam.y+Math.sin(ra)*d)/TILE))%5===0)
+        ? theme.accent : theme.stripe;
+      ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.68,step+1,(wallBottom-wallTop)*.32);
+      ctx.globalAlpha=1;
+    }
     if((Math.floor(x/step)+Math.floor(d/70))%7===0){
-      ctx.fillStyle="rgba(255,255,255,.055)";
+      ctx.fillStyle="rgba(255,255,255,.075)";
       ctx.fillRect(x,wallTop,1,wallBottom-wallTop);
     }
-    ctx.fillStyle="rgba(0,0,0,.12)";
+    ctx.fillStyle="rgba(0,0,0,.13)";
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
   }
 
