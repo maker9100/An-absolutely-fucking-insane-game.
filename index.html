@@ -133,6 +133,15 @@ button{font:inherit}
 #healthBarValue{font-size:16px}
 #healthBarTrack{height:14px;background:#292d2f;border:1px solid #61676a;border-radius:3px;overflow:hidden}
 #healthBarFill{height:100%;width:100%;background:linear-gradient(90deg,#9e2d2d,#d5a03e);transition:width .1s linear}
+#shieldBarWrap{position:fixed;z-index:64;left:20px;bottom:160px;width:300px;padding:8px 10px;background:#101416dc;border:1px solid #ffffff24;border-radius:7px;pointer-events:none}
+#shieldBarTop{display:flex;justify-content:space-between;align-items:center;color:#fff2b5;font:700 12px Arial;margin-bottom:5px}
+#shieldBarTrack{height:10px;background:#292d2f;border:1px solid #61676a;border-radius:3px;overflow:hidden}
+#shieldBarFill{height:100%;width:100%;background:linear-gradient(90deg,#b78b18,#f2cf4a);transition:width .1s linear}
+@media(max-width:700px){
+  #shieldBarWrap{left:14px;bottom:150px;width:190px;padding:6px 9px}
+  #shieldBarTrack{height:9px}
+}
+
 @media(max-width:700px){
   #healthBarWrap{left:14px;bottom:108px;width:190px;padding:7px 9px}
   #healthBarTrack{height:11px}
@@ -268,7 +277,12 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 ORB LOS + MINIMAP</div>
+<div id="shieldBarWrap" class="hidden">
+  <div id="shieldBarTop"><span>SHIELD</span><span id="shieldBarValue">50</span></div>
+  <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
+</div>
+
+<div id="buildBadge">BUILD 2026-09-07 SHIELD + ORBS</div>
 
 
 <canvas id="game"></canvas>
@@ -500,6 +514,33 @@ const MAPS = [
 let currentMapIndex=0;
 
 const HEALTH_ORB_HEAL=10, HEALTH_ORB_RESPAWN=9;
+
+const SHIELD_MAX=50;
+const SHIELD_ORB_GAIN=25;
+const SHIELD_REGEN_DELAY=4;
+const SHIELD_REGEN_RATE=15;
+const SHIELD_ORB_RESPAWN=11;
+let shieldOrbs=[];
+
+function ensureShieldState(e){
+  if(!e)return;
+  if(!Number.isFinite(e.shield)) e.shield=SHIELD_MAX;
+  if(!Number.isFinite(e.shieldRegenDelay)) e.shieldRegenDelay=0;
+}
+function resetEntityShield(e){
+  if(!e)return;
+  e.shield=SHIELD_MAX;
+  e.shieldRegenDelay=0;
+}
+function updateShieldRegen(e,dt){
+  if(!e||!e.alive)return;
+  ensureShieldState(e);
+  e.shieldRegenDelay=Math.max(0,e.shieldRegenDelay-dt);
+  if(e.shieldRegenDelay<=0 && e.shield<SHIELD_MAX){
+    e.shield=Math.min(SHIELD_MAX,e.shield+SHIELD_REGEN_RATE*dt);
+  }
+}
+
 let healthOrbs=[];
 function resetHealthOrbs(){
   const spots=[];
@@ -514,7 +555,6 @@ function healWithOrb(e,o){
   if(!e||!e.alive||!o.active||e.hp>=100)return false;
   e.hp=Math.min(100,e.hp+HEALTH_ORB_HEAL);
   o.active=false;o.respawn=HEALTH_ORB_RESPAWN;
-  if(e===player)showToast?.("HP +10");
   return true;
 }
 function updateHealthOrbs(dt){
@@ -530,6 +570,49 @@ function nearestHealthOrb(e){
   for(const o of healthOrbs){if(!o.active)continue;const d=dist(e,o);if(d<bd){bd=d;best=o;}}
   return best?{orb:best,d:bd}:null;
 }
+
+function resetShieldOrbs(){
+  const spots=[];
+  for(let y=2;y<MAP.length-2;y++)for(let x=2;x<MAP[y].length-2;x++){
+    if(MAP[y][x]==="." && ((x*13+y*5+currentMapIndex*7)%29===0)) spots.push([x,y]);
+  }
+  shieldOrbs=spots.slice(0,2).map(([x,y],i)=>({
+    x:(x+.5)*TILE,y:(y+.5)*TILE,active:true,respawn:0,phase:i*2.7+.8
+  }));
+}
+function gainShieldWithOrb(e,o){
+  if(!e||!e.alive||!o.active)return false;
+  ensureShieldState(e);
+  if(e.shield>=SHIELD_MAX)return false;
+  e.shield=Math.min(SHIELD_MAX,e.shield+SHIELD_ORB_GAIN);
+  e.shieldRegenDelay=0;
+  o.active=false;o.respawn=SHIELD_ORB_RESPAWN;
+  return true;
+}
+function updateShieldOrbs(dt){
+  if(!shieldOrbs.length) resetShieldOrbs();
+  for(const o of shieldOrbs){
+    if(!o.active){
+      o.respawn-=dt;
+      if(o.respawn<=0){o.active=true;o.respawn=0;}
+      continue;
+    }
+    if(player.alive&&dist(player,o)<24) gainShieldWithOrb(player,o);
+    for(const b of bots){
+      if(b.alive&&dist(b,o)<24){gainShieldWithOrb(b,o);break;}
+    }
+  }
+}
+function nearestShieldOrb(e){
+  let best=null,bd=Infinity;
+  for(const o of shieldOrbs){
+    if(!o.active)continue;
+    const d=dist(e,o);
+    if(d<bd){bd=d;best=o;}
+  }
+  return best?{orb:best,d:bd}:null;
+}
+
 
 let MAP=MAPS[0].grid;
 let playerSpawn=MAPS[0].player;
@@ -602,7 +685,7 @@ const WEAPONS = [
 
 const player = {
   x:2.5*TILE, y:2.5*TILE, a:0,
-  hp:100, team:0, weapon:0, ammo:[30,12,999,6,1,50],
+  hp:100, shield:SHIELD_MAX, shieldRegenDelay:0, team:0, weapon:0, ammo:[30,12,999,6,1,50],
   nextShot:0, kills:0, deaths:0, alive:true,
   jumpZ:0, jumpVel:0, crouched:false, crouchBlend:0, landingKick:0
 };
@@ -625,7 +708,7 @@ let botSerial=0;
 function botAt(pos, team, name){
   const load=BOT_LOADOUTS[botSerial++%BOT_LOADOUTS.length];
   return {
-    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,team,name,nextShot:0,alive:true,
+    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,shield:SHIELD_MAX,shieldRegenDelay:0,team,name,nextShot:0,alive:true,
     strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI,
     path:[],pathIndex:0,repath:0,targetUid:null,targetCell:"",
     stuckFor:0,lastX:pos[0]*TILE,lastY:pos[1]*TILE,
@@ -1051,6 +1134,7 @@ function spawnEntity(e){
   e.x=p[0]*TILE;
   e.y=p[1]*TILE;
   e.hp=100;
+  resetEntityShield(e);
   e.alive=true;
   if(e===player) player.ammo=[30,12,999,6,1,50];
   else resetBotNavigation(e);
@@ -1118,6 +1202,7 @@ function spawnBlood(target){
 function resetEntityForRound(e, spawn){
   e.alive=true;
   e.hp=100;
+  resetEntityShield(e);
   e.x=spawn[0]*TILE;
   e.y=spawn[1]*TILE;
   e.nextShot=0;
@@ -1143,6 +1228,7 @@ function setMatchUi(inMatch){
   ui.crosshair.classList.toggle("hidden",!inMatch);
   ui.roundHud.classList.toggle("hidden",!inMatch);
   ui.healthBarWrap.classList.toggle("hidden",!inMatch);
+  $("shieldBarWrap").classList.toggle("hidden",!inMatch);
   ui.movementState?.classList.toggle("hidden",!inMatch);
   if(TOUCH) ui.touchUI.classList.toggle("hidden",!inMatch);
   else ui.touchUI.classList.add("hidden");
@@ -1213,6 +1299,7 @@ function beginNextRound(){
   matchEndAt=0;
 
   player.hp=100;
+  resetEntityShield(player);
   player.alive=true;
   player.x=playerSpawn[0]*TILE;
   player.y=playerSpawn[1]*TILE;
@@ -1255,7 +1342,7 @@ function beginNextRound(){
 function startMatch(){
   onlineMode=false;
   rebuildAIBots();
-  currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];
+  currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];shieldOrbs=[];
   applyMap(currentMapIndex);
   resetMatchScore();
   setMatchUi(true);
@@ -1311,6 +1398,17 @@ function checkRoundEnd(){
 
 function damageTarget(target,amount,shooter){
   if(!target||!target.alive)return;
+  ensureShieldState(target);
+  target.shieldRegenDelay=SHIELD_REGEN_DELAY;
+  if(target.shield>0){
+    const absorbed=Math.min(target.shield,amount);
+    target.shield-=absorbed;
+    amount-=absorbed;
+    if(amount<=0){
+      if(target===player) onPlayerHurt(absorbed,shooter);
+      return;
+    }
+  }
   if(target!==player && shooter && target.team!==shooter.team){
     target.alertTarget=shooter;
     target.alertTime=2.2;
@@ -1846,8 +1944,12 @@ function updateBots(dt){
 
     let desiredX=0,desiredY=0;
     const healPick=b.hp<=55?nearestHealthOrb(b):null;
-    if(healPick&&healPick.d<520&&!(sees&&d<150)){
-      const ha=angle(b,healPick.orb);
+    const shieldPick=(b.shield??SHIELD_MAX)<=18?nearestShieldOrb(b):null;
+    let pickupGoal=null;
+    if(healPick&&healPick.d<520)pickupGoal=healPick;
+    if(shieldPick&&shieldPick.d<520&&(!pickupGoal||shieldPick.d<pickupGoal.d))pickupGoal=shieldPick;
+    if(pickupGoal&&!(sees&&d<150)){
+      const ha=angle(b,pickupGoal.orb);
       desiredX+=Math.cos(ha)*.92;desiredY+=Math.sin(ha)*.92;
       b.huntRush=Math.max(b.huntRush,.35);
     }
@@ -2282,6 +2384,14 @@ function drawMinimap(cam){
     ctx.fill();
   }
 
+
+  for(const o of shieldOrbs){
+    if(!o.active)continue;
+    const px=ox+(o.x/TILE)*cell,py=oy+(o.y/TILE)*cell;
+    ctx.fillStyle="#f4c63d";
+    ctx.beginPath();ctx.arc(px,py,Math.max(2.2,cell*.24),0,TWO_PI);ctx.fill();
+  }
+
   // Allies are always shown. Enemies appear only with ESP enabled.
   for(const e of allEntities()){
     if(!e.alive||e===cam)continue;
@@ -2412,7 +2522,7 @@ function renderWorld(){
     if(Math.abs(oa)>FOV*.62||od<10)continue;
     const cd=od*Math.cos(oa);if(cd<=1)continue;
     const ox=w/2+(Math.tan(oa)/Math.tan(FOV/2))*w/2;
-    const os=Math.max(8,Math.min(46,(h*24)/cd));
+    const os=Math.max(6,Math.min(30,(h*18)/cd));
     const oy=horizon+(h*TILE/Math.max(cd,1))*.18-Math.sin(gameTime*3.2+o.phase)*os*.18;
     ctx.save();
     ctx.globalAlpha=.24;ctx.fillStyle="#38ff72";
@@ -2422,6 +2532,37 @@ function renderWorld(){
     ctx.fillStyle="#effff3";
     ctx.fillRect(ox-os*.08,oy-os*.29,os*.16,os*.58);
     ctx.fillRect(ox-os*.29,oy-os*.08,os*.58,os*.16);
+    ctx.restore();
+  }
+
+
+  // Floating yellow shield pickups; obey wall line-of-sight.
+  for(const o of shieldOrbs){
+    if(!o.active)continue;
+    if(!los(cam,o))continue;
+    const dx=o.x-cam.x,dy=o.y-cam.y,od=Math.hypot(dx,dy);
+    const oa=norm(Math.atan2(dy,dx)-viewAngle);
+    if(Math.abs(oa)>FOV*.62||od<10)continue;
+    const cd=od*Math.cos(oa);if(cd<=1)continue;
+    const ox=w/2+(Math.tan(oa)/Math.tan(FOV/2))*w/2;
+    const os=Math.max(6,Math.min(30,(h*18)/cd));
+    const oy=horizon+(h*TILE/Math.max(cd,1))*.18-Math.sin(gameTime*3+o.phase)*os*.16;
+
+    ctx.save();
+    ctx.globalAlpha=.22;ctx.fillStyle="#ffd84a";
+    ctx.beginPath();ctx.arc(ox,oy,os*.88,0,TWO_PI);ctx.fill();
+    ctx.globalAlpha=1;ctx.fillStyle="#d4a91e";
+    ctx.beginPath();ctx.arc(ox,oy,os*.54,0,TWO_PI);ctx.fill();
+
+    ctx.fillStyle="#fff4b0";
+    ctx.beginPath();
+    ctx.moveTo(ox,oy-os*.31);
+    ctx.lineTo(ox+os*.24,oy-os*.18);
+    ctx.lineTo(ox+os*.18,oy+os*.10);
+    ctx.quadraticCurveTo(ox,oy+os*.34,ox,oy+os*.34);
+    ctx.quadraticCurveTo(ox-os*.18,oy+os*.10,ox-os*.18,oy+os*.10);
+    ctx.lineTo(ox-os*.24,oy-os*.18);
+    ctx.closePath();ctx.fill();
     ctx.restore();
   }
 
@@ -2734,6 +2875,12 @@ function renderWorld(){
   const hbValue=document.getElementById("healthBarValue");
   if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,hudHp))}%`;
   if(hbValue) hbValue.textContent=hudHp;
+  ensureShieldState(hudActor);
+  const hudShield=Math.max(0,Math.ceil(hudActor.shield||0));
+  const sbFill=document.getElementById("shieldBarFill");
+  const sbValue=document.getElementById("shieldBarValue");
+  if(sbFill) sbFill.style.width=`${Math.max(0,Math.min(100,hudShield/SHIELD_MAX*100))}%`;
+  if(sbValue) sbValue.textContent=hudShield;
   const dn=document.getElementById("deathNotice");
   const inSpectator=!player.alive && !roundOver;
   if(dn) dn.style.display=inSpectator?"block":"none";
@@ -3247,7 +3394,7 @@ function beginOnlineRound(room){
   player.team=Number(me.team)||0;
   const sp=onlineSpawnFor(player.team,online.user.uid,room);
   player.x=sp[0]*TILE;player.y=sp[1]*TILE;player.a=0;
-  player.hp=100;player.alive=true;player.weapon=0;player.ammo=[30,12,999,6,1,50];
+  player.hp=100;resetEntityShield(player);player.alive=true;player.weapon=0;player.ammo=[30,12,999,6,1,50];
   player.nextShot=0;player.jumpZ=0;player.jumpVel=0;player.crouched=false;
   player.crouchBlend=0;player.landingKick=0;
   cameraPitch=0;recoilPitch=0;recoilKick=0;recoilSide=0;
@@ -3592,6 +3739,9 @@ function loop(now){
       updateBots(dt);
       
     updateHealthOrbs(dt);
+    updateShieldOrbs(dt);
+    updateShieldRegen(player,dt);
+    for(const b of bots) updateShieldRegen(b,dt);
 updateRemotePlayers(dt);
       updateProjectiles(dt);
       updateBloodFx(dt);
