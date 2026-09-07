@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 ENTERABLE BUNKERS</div>
+<div id="buildBadge">BUILD 2026-09-07 AI JUMP FIXED</div>
 
 
 <canvas id="game"></canvas>
@@ -395,10 +395,10 @@ const MAPS = [
     name:"DEPOT",
     grid:[
       "####################",
-      "#BBBB..............#",
-      "#B..B..............#",
-      "#B..B##............#",
-      "#B...##......##....#",
+      "#..................#",
+      "#..................#",
+      "#....##............#",
+      "#....##......##....#",
       "#............##....#",
       "#..................#",
       "#.......###........#",
@@ -423,10 +423,10 @@ const MAPS = [
       "####################",
       "#..................#",
       "#..####.....####...#",
-      "#BBBB..............#",
-      "#B..B.###..........#",
-      "#B..B.###....###...#",
-      "#B...........###...#",
+      "#..................#",
+      "#.....###..........#",
+      "#.....###....###...#",
+      "#............###...#",
       "#..###.............#",
       "#..###.....###.....#",
       "#..........###.....#",
@@ -447,10 +447,10 @@ const MAPS = [
     name:"LA. WING",
     grid:[
       "####################",
-      "#..............BBBB#",
-      "#..####....####B..B#",
-      "#..#..........#B..B#",
-      "#..#..##..##..#B...#",
+      "#..................#",
+      "#..####....####....#",
+      "#..#..........#....#",
+      "#..#..##..##..#....#",
       "#.....##..##.......#",
       "#..................#",
       "#.###....##....###.#",
@@ -473,10 +473,10 @@ const MAPS = [
     name:"CENTRAL PLAZA",
     grid:[
       "####################",
-      "#BBBB..............#",
-      "#B..B..............#",
-      "#B..B##......##....#",
-      "#B...##......##....#",
+      "#..................#",
+      "#..................#",
+      "#....##......##....#",
+      "#....##......##....#",
       "#..................#",
       "#........##........#",
       "#.......####.......#",
@@ -762,7 +762,7 @@ function wall(x,y){
   const gx = Math.floor(x/TILE);
   const gy = Math.floor(y/TILE);
   if (gy < 0 || gx < 0 || gy >= MAP.length || gx >= MAP[0].length) return true;
-  return MAP[gy][gx] === "#" || MAP[gy][gx] === "B";
+  return MAP[gy][gx] === "#";
 }
 
 function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
@@ -781,7 +781,7 @@ function moveEnt(e,dx,dy){
 
 function tileWall(gx,gy){
   if(gy<0||gx<0||gy>=MAP.length||gx>=MAP[0].length) return true;
-  return MAP[gy][gx]==="#" || MAP[gy][gx]==="B";
+  return MAP[gy][gx]==="#";
 }
 
 function circleHitsWall(x,y,r=BOT_RADIUS){
@@ -1729,7 +1729,7 @@ function updateBots(dt){
       if(sees&&d>115&&Math.random()<.28)b.crouchFor=.32+Math.random()*.62;
       // Tactical jump: occasional only, never bunny-hop.
       if(sees&&d>140&&b.jumpZ<=.01&&b.jumpCooldown<=0&&Math.random()<.10){
-        b.jumpVel=235+Math.random()*45;
+        b.jumpVel=0;
         b.jumpCooldown=2.8+Math.random()*2.8;
       }
     }
@@ -1855,7 +1855,7 @@ function updateBots(dt){
         b.moveBias*=-1;b.forceMoveFor=.55;b.repath=0;b.path=[];b.pathIndex=0;
         // Jump is last-resort stuck recovery, with a long cooldown.
         if(b.jumpZ<=.01&&b.stuckJumpCooldown<=0){
-          b.jumpVel=245;
+          b.jumpVel=0;
           b.stuckJumpCooldown=3.5;
           b.jumpCooldown=Math.max(b.jumpCooldown||0,2.8);
         }
@@ -2217,20 +2217,16 @@ function renderWorld(){
     d*=Math.cos(ra-viewAngle);
     const hitWX=cam.x+Math.cos(ra)*d, hitWY=cam.y+Math.sin(ra)*d;
     const hitGX=Math.floor(hitWX/TILE), hitGY=Math.floor(hitWY/TILE);
-    const hitCell=(MAP[hitGY]&&MAP[hitGY][hitGX])||"#";
-    const isBunker=hitCell==="B";
     const fullWh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const wallBottom=horizon+fullWh*cameraHeight;
     const wallTop=horizon-fullWh*(1-cameraHeight);
     const depth=Math.max(0,Math.min(1,d/1100));
-    const wallColor=isBunker
-      ? mixHex("#8d918d","#3d4140",depth*.68)
-      : mixHex(theme.wall,theme.wallDark,depth*.82);
+    const wallColor=mixHex(theme.wall,theme.wallDark,depth*.82);
     ctx.fillStyle=wallColor;
     ctx.fillRect(x,wallTop,step+1,wallBottom-wallTop);
 
     // Painted lower band + occasional colored columns for stronger landmarking.
-    if(!isBunker && wallBottom-wallTop>28){
+    if(wallBottom-wallTop>28){
       ctx.globalAlpha=.28;
       ctx.fillStyle=((Math.floor((cam.x+Math.cos(ra)*d)/TILE)+Math.floor((cam.y+Math.sin(ra)*d)/TILE))%5===0)
         ? theme.accent : theme.stripe;
@@ -2243,18 +2239,6 @@ function renderWorld(){
     }
     ctx.fillStyle="rgba(0,0,0,.13)";
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
-
-    if(isBunker && wallBottom-wallTop>24){
-      // Full concrete bunker wall + compact firing slit.
-      ctx.fillStyle="rgba(235,238,232,.16)";
-      ctx.fillRect(x,wallTop,step+1,Math.max(2,(wallBottom-wallTop)*.05));
-      const slitY=wallTop+(wallBottom-wallTop)*.40;
-      const slitH=Math.max(3,(wallBottom-wallTop)*.085);
-      ctx.fillStyle="#0a0d0e";
-      ctx.fillRect(x,slitY,step+1,slitH);
-      ctx.fillStyle="rgba(18,22,23,.28)";
-      ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.82,step+1,(wallBottom-wallTop)*.18);
-    }
   }
 
   const entities=bots.filter(b=>b.alive && b!==cam).sort((a,b)=>dist(cam,b)-dist(cam,a));
