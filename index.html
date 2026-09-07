@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 7-WIN TACTICAL BUNKERS</div>
+<div id="buildBadge">BUILD 2026-09-07 FREESTANDING BUNKERS</div>
 
 
 <canvas id="game"></canvas>
@@ -396,14 +396,14 @@ const MAPS = [
     grid:[
       "####################",
       "#..................#",
-      "#..................#",
+      "#.......BB.........#",
       "#....##............#",
       "#....##......##....#",
       "#............##....#",
       "#..................#",
       "#.......###........#",
       "#.......###........#",
-      "#..................#",
+      "#..BB..............#",
       "#..##..............#",
       "#..##.......###....#",
       "#...........###....#",
@@ -423,14 +423,14 @@ const MAPS = [
       "####################",
       "#..................#",
       "#..####.....####...#",
-      "#..................#",
+      "#.....BB...........#",
       "#.....###..........#",
       "#.....###....###...#",
       "#............###...#",
       "#..###.............#",
       "#..###.....###.....#",
       "#..........###.....#",
-      "#.....###..........#",
+      "#.....###..BB......#",
       "#.....###.....###..#",
       "#.............###..#",
       "#..###.............#",
@@ -452,11 +452,11 @@ const MAPS = [
       "#..#..........#....#",
       "#..#..##..##..#....#",
       "#.....##..##.......#",
-      "#..................#",
+      "#.......BB.........#",
       "#.###....##....###.#",
       "#........##........#",
       "#.###....##....###.#",
-      "#..................#",
+      "#....BB............#",
       "#.....##..##.......#",
       "#..#..##..##..#....#",
       "#..#..........#....#",
@@ -477,12 +477,12 @@ const MAPS = [
       "#..................#",
       "#....##......##....#",
       "#....##......##....#",
-      "#..................#",
+      "#......BB..........#",
       "#........##........#",
       "#.......####.......#",
       "#.......####.......#",
       "#........##........#",
-      "#..................#",
+      "#..........BB......#",
       "#....##......##....#",
       "#....##......##....#",
       "#..................#",
@@ -503,15 +503,6 @@ let playerSpawn=MAPS[0].player;
 let blueSpawn=MAPS[0].blue;
 let redSpawn=MAPS[0].red;
 
-
-// Bunker firing-port landmarks on solid wall cells.
-const BUNKER_PORTS=[
- new Set(["5,3","13,4","8,7","12,11","7,14"]),
- new Set(["3,2","12,2","6,4","14,5","10,8","15,11"]),
- new Set(["3,3","14,3","6,4","11,4","9,7","9,12","14,13"]),
- new Set(["5,3","14,3","9,6","8,8","14,11","3,14"])
-];
-function isBunkerPortCell(cx,cy){return (BUNKER_PORTS[currentMapIndex]||BUNKER_PORTS[0]).has(`${cx},${cy}`);}
 
 const MAP_THEMES = [
   {
@@ -771,7 +762,7 @@ function wall(x,y){
   const gx = Math.floor(x/TILE);
   const gy = Math.floor(y/TILE);
   if (gy < 0 || gx < 0 || gy >= MAP.length || gx >= MAP[0].length) return true;
-  return MAP[gy][gx] === "#";
+  return MAP[gy][gx] === "#" || MAP[gy][gx] === "B";
 }
 
 function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
@@ -790,7 +781,7 @@ function moveEnt(e,dx,dy){
 
 function tileWall(gx,gy){
   if(gy<0||gx<0||gy>=MAP.length||gx>=MAP[0].length) return true;
-  return MAP[gy][gx]==="#";
+  return MAP[gy][gx]==="#" || MAP[gy][gx]==="B";
 }
 
 function circleHitsWall(x,y,r=BOT_RADIUS){
@@ -2212,16 +2203,22 @@ function renderWorld(){
       d+=5;
     }
     d*=Math.cos(ra-viewAngle);
-    const wh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
-    const wallTop=horizon-wh*(1-cameraHeight);
-    const wallBottom=horizon+wh*cameraHeight;
+    const hitWX=cam.x+Math.cos(ra)*d, hitWY=cam.y+Math.sin(ra)*d;
+    const hitGX=Math.floor(hitWX/TILE), hitGY=Math.floor(hitWY/TILE);
+    const hitCell=(MAP[hitGY]&&MAP[hitGY][hitGX])||"#";
+    const isBunker=hitCell==="B";
+    const fullWh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
+    const wallBottom=horizon+fullWh*cameraHeight;
+    const wallTop=isBunker ? wallBottom-fullWh*.58 : horizon-fullWh*(1-cameraHeight);
     const depth=Math.max(0,Math.min(1,d/1100));
-    const wallColor=mixHex(theme.wall,theme.wallDark,depth*.82);
+    const wallColor=isBunker
+      ? mixHex("#777b78","#343837",depth*.72)
+      : mixHex(theme.wall,theme.wallDark,depth*.82);
     ctx.fillStyle=wallColor;
     ctx.fillRect(x,wallTop,step+1,wallBottom-wallTop);
 
     // Painted lower band + occasional colored columns for stronger landmarking.
-    if(wallBottom-wallTop>28){
+    if(!isBunker && wallBottom-wallTop>28){
       ctx.globalAlpha=.28;
       ctx.fillStyle=((Math.floor((cam.x+Math.cos(ra)*d)/TILE)+Math.floor((cam.y+Math.sin(ra)*d)/TILE))%5===0)
         ? theme.accent : theme.stripe;
@@ -2234,13 +2231,25 @@ function renderWorld(){
     }
     ctx.fillStyle="rgba(0,0,0,.13)";
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
-    // Recessed bunker firing slit with a dark gun barrel.
-    const hitCX=Math.floor((cam.x+Math.cos(ra)*d)/TILE),hitCY=Math.floor((cam.y+Math.sin(ra)*d)/TILE);
-    if(isBunkerPortCell(hitCX,hitCY)&&wallBottom-wallTop>42){
-      const py=wallTop+(wallBottom-wallTop)*.43,ph=Math.max(5,(wallBottom-wallTop)*.12);
-      ctx.fillStyle="#0c0f10";ctx.fillRect(x,py,step+1,ph);
-      ctx.fillStyle="#42494d";ctx.fillRect(x,py+ph*.42,step+1,Math.max(2,ph*.24));
-      if((x%(step*7))<step){ctx.fillStyle="#171a1c";ctx.fillRect(x,py+ph*.36,Math.max(6,step+3),Math.max(3,ph*.34));}
+
+    if(isBunker && wallBottom-wallTop>24){
+      // Concrete cap.
+      ctx.fillStyle="rgba(230,235,226,.20)";
+      ctx.fillRect(x,wallTop,step+1,Math.max(2,(wallBottom-wallTop)*.07));
+
+      // Horizontal firing slit through the bunker face.
+      const slitY=wallTop+(wallBottom-wallTop)*.34;
+      const slitH=Math.max(4,(wallBottom-wallTop)*.14);
+      ctx.fillStyle="#080b0c";
+      ctx.fillRect(x,slitY,step+1,slitH);
+
+      // Dark metal gun/barrel visible through the slit.
+      ctx.fillStyle="#252b2e";
+      ctx.fillRect(x,slitY+slitH*.38,step+1,Math.max(2,slitH*.30));
+
+      // Lower reinforced concrete band.
+      ctx.fillStyle="rgba(20,24,24,.24)";
+      ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.74,step+1,(wallBottom-wallTop)*.26);
     }
   }
 
