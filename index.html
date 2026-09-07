@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 HEALTH ORBS</div>
+<div id="buildBadge">BUILD 2026-09-07 ORB LOS + MINIMAP</div>
 
 
 <canvas id="game"></canvas>
@@ -2241,6 +2241,77 @@ function drawSoldierModel(e,sx,baseY,sz){
 }
 
 
+
+function drawMinimap(cam){
+  if(!running||!MAP?.length)return;
+
+  const mw=innerWidth<720?112:142;
+  const mh=mw;
+  const mx=14,my=40;
+  const rows=MAP.length,cols=MAP[0].length;
+  const cell=Math.min((mw-12)/cols,(mh-12)/rows);
+  const mapW=cols*cell,mapH=rows*cell;
+  const ox=mx+(mw-mapW)/2,oy=my+(mh-mapH)/2;
+
+  ctx.save();
+
+  // Panel.
+  ctx.fillStyle="rgba(8,11,13,.76)";
+  ctx.fillRect(mx,my,mw,mh);
+  ctx.strokeStyle="rgba(255,255,255,.28)";
+  ctx.lineWidth=1;
+  ctx.strokeRect(mx+.5,my+.5,mw-1,mh-1);
+
+  // Map geometry.
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      if(MAP[y][x]==="#"){
+        ctx.fillStyle="rgba(208,213,210,.52)";
+        ctx.fillRect(ox+x*cell,oy+y*cell,Math.ceil(cell),Math.ceil(cell));
+      }
+    }
+  }
+
+  // Health pickups remain useful as navigation landmarks even when hidden by walls.
+  for(const o of healthOrbs){
+    if(!o.active)continue;
+    const px=ox+(o.x/TILE)*cell,py=oy+(o.y/TILE)*cell;
+    ctx.fillStyle="#24e56b";
+    ctx.beginPath();
+    ctx.arc(px,py,Math.max(2.2,cell*.24),0,TWO_PI);
+    ctx.fill();
+  }
+
+  // Allies are always shown. Enemies appear only with ESP enabled.
+  for(const e of allEntities()){
+    if(!e.alive||e===cam)continue;
+    if(e.team!==cam.team&&!espOn)continue;
+    const px=ox+(e.x/TILE)*cell,py=oy+(e.y/TILE)*cell;
+    ctx.fillStyle=e.team===cam.team?"#55bfff":"#ff5353";
+    ctx.beginPath();
+    ctx.arc(px,py,Math.max(2.3,cell*.26),0,TWO_PI);
+    ctx.fill();
+  }
+
+  // Current viewpoint / player arrow.
+  const px=ox+(cam.x/TILE)*cell,py=oy+(cam.y/TILE)*cell;
+  const aa=cam.a||0;
+  const rr=Math.max(4,cell*.55);
+  ctx.fillStyle=cam.team===1?"#ff6a6a":"#e9f7ff";
+  ctx.beginPath();
+  ctx.moveTo(px+Math.cos(aa)*rr,py+Math.sin(aa)*rr);
+  ctx.lineTo(px+Math.cos(aa+2.45)*rr*.75,py+Math.sin(aa+2.45)*rr*.75);
+  ctx.lineTo(px+Math.cos(aa-2.45)*rr*.75,py+Math.sin(aa-2.45)*rr*.75);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle="rgba(255,255,255,.72)";
+  ctx.font="700 9px Arial";
+  ctx.fillText("MAP",mx+6,my+11);
+
+  ctx.restore();
+}
+
 function renderWorld(){
   const w=innerWidth,h=innerHeight;
   const cam=viewActor();
@@ -2334,6 +2405,8 @@ function renderWorld(){
   // Floating green HP +10 pickups.
   for(const o of healthOrbs){
     if(!o.active)continue;
+    // World pickups obey line-of-sight; they no longer glow through walls.
+    if(!los(cam,o))continue;
     const dx=o.x-cam.x,dy=o.y-cam.y,od=Math.hypot(dx,dy);
     const oa=norm(Math.atan2(dy,dx)-viewAngle);
     if(Math.abs(oa)>FOV*.62||od<10)continue;
@@ -2690,6 +2763,8 @@ function renderWorld(){
   ui.aimState.classList.toggle("cheatOn",aimOn);
   ui.espState.textContent=`F2 ESP ${espOn?"ON":"OFF"}`;
   ui.espState.classList.toggle("cheatOn",espOn);
+
+  drawMinimap(cam);
 }
 
 function bindStick(id,state){
