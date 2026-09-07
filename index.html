@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 FREESTANDING BUNKERS</div>
+<div id="buildBadge">BUILD 2026-09-07 ENTERABLE BUNKERS</div>
 
 
 <canvas id="game"></canvas>
@@ -395,15 +395,15 @@ const MAPS = [
     name:"DEPOT",
     grid:[
       "####################",
-      "#..................#",
-      "#.......BB.........#",
-      "#....##............#",
-      "#....##......##....#",
+      "#BBBB..............#",
+      "#B..B..............#",
+      "#B..B##............#",
+      "#B...##......##....#",
       "#............##....#",
       "#..................#",
       "#.......###........#",
       "#.......###........#",
-      "#..BB..............#",
+      "#..................#",
       "#..##..............#",
       "#..##.......###....#",
       "#...........###....#",
@@ -423,14 +423,14 @@ const MAPS = [
       "####################",
       "#..................#",
       "#..####.....####...#",
-      "#.....BB...........#",
-      "#.....###..........#",
-      "#.....###....###...#",
-      "#............###...#",
+      "#BBBB..............#",
+      "#B..B.###..........#",
+      "#B..B.###....###...#",
+      "#B...........###...#",
       "#..###.............#",
       "#..###.....###.....#",
       "#..........###.....#",
-      "#.....###..BB......#",
+      "#.....###..........#",
       "#.....###.....###..#",
       "#.............###..#",
       "#..###.............#",
@@ -444,19 +444,19 @@ const MAPS = [
     red:[[16,16],[15,15],[17,13],[16,13],[17,16]]
   },
   {
-    name:"LAB WING",
+    name:"LA. WING",
     grid:[
       "####################",
-      "#..................#",
-      "#..####....####....#",
-      "#..#..........#....#",
-      "#..#..##..##..#....#",
+      "#..............BBBB#",
+      "#..####....####B..B#",
+      "#..#..........#B..B#",
+      "#..#..##..##..#B...#",
       "#.....##..##.......#",
-      "#.......BB.........#",
+      "#..................#",
       "#.###....##....###.#",
       "#........##........#",
       "#.###....##....###.#",
-      "#....BB............#",
+      "#..................#",
       "#.....##..##.......#",
       "#..#..##..##..#....#",
       "#..#..........#....#",
@@ -473,16 +473,16 @@ const MAPS = [
     name:"CENTRAL PLAZA",
     grid:[
       "####################",
+      "#BBBB..............#",
+      "#B..B..............#",
+      "#B..B##......##....#",
+      "#B...##......##....#",
       "#..................#",
-      "#..................#",
-      "#....##......##....#",
-      "#....##......##....#",
-      "#......BB..........#",
       "#........##........#",
       "#.......####.......#",
       "#.......####.......#",
       "#........##........#",
-      "#..........BB......#",
+      "#..................#",
       "#....##......##....#",
       "#....##......##....#",
       "#..................#",
@@ -601,7 +601,7 @@ function botAt(pos, team, name){
     aggression:load.aggression,skill:load.skill,
     aimError:(Math.random()-.5)*.07,aimSettle:0,
     lastTargetX:0,lastTargetY:0,retreating:false,
-    jumpZ:0,jumpVel:0,crouched:false,crouchBlend:0,actionThink:.35+Math.random()*.8,crouchFor:0,idleFor:0,forceMoveFor:0,moveBias:Math.random()<.5?-1:1
+    jumpZ:0,jumpVel:0,crouched:false,crouchBlend:0,actionThink:.35+Math.random()*.8,crouchFor:0,idleFor:0,forceMoveFor:0,moveBias:Math.random()<.5?-1:1,jumpCooldown:1.8+Math.random()*2.4,stuckJumpCooldown:2.5
   };
 }
 const bots = [];
@@ -1720,11 +1720,18 @@ function updateBots(dt){
     b.repath-=dt;
     b.aimSettle=Math.min(1,b.aimSettle+dt*(1.4+b.skill*2.2));
     // Jump/crouch tactical stance AI.
-    b.actionThink-=dt;b.crouchFor=Math.max(0,(b.crouchFor||0)-dt);
+    b.actionThink-=dt;
+    b.crouchFor=Math.max(0,(b.crouchFor||0)-dt);
+    b.jumpCooldown=Math.max(0,(b.jumpCooldown||0)-dt);
+    b.stuckJumpCooldown=Math.max(0,(b.stuckJumpCooldown||0)-dt);
     if(b.actionThink<=0){
-      b.actionThink=.55+Math.random()*1.25;
-      if(sees&&d>115&&Math.random()<.34)b.crouchFor=.32+Math.random()*.72;
-      if((sees||b.stuckFor>.08)&&b.jumpZ<=.01&&Math.random()<.28)b.jumpVel=235+Math.random()*55;
+      b.actionThink=.65+Math.random()*1.35;
+      if(sees&&d>115&&Math.random()<.28)b.crouchFor=.32+Math.random()*.62;
+      // Tactical jump: occasional only, never bunny-hop.
+      if(sees&&d>140&&b.jumpZ<=.01&&b.jumpCooldown<=0&&Math.random()<.10){
+        b.jumpVel=235+Math.random()*45;
+        b.jumpCooldown=2.8+Math.random()*2.8;
+      }
     }
     b.crouched=b.crouchFor>0&&b.jumpZ<=.01;
     if(b.jumpZ>0||b.jumpVel>0){b.jumpVel-=620*dt;b.jumpZ+=b.jumpVel*dt;if(b.jumpZ<=0){b.jumpZ=0;b.jumpVel=0;}}
@@ -1846,7 +1853,12 @@ function updateBots(dt){
       if(b.stuckFor>.18){b.repath=0;b.path=[];b.pathIndex=0;b.avoidSide*=-1;b.strafe*=-1;}
       if(b.idleFor>.42){
         b.moveBias*=-1;b.forceMoveFor=.55;b.repath=0;b.path=[];b.pathIndex=0;
-        if(b.jumpZ<=.01)b.jumpVel=255;
+        // Jump is last-resort stuck recovery, with a long cooldown.
+        if(b.jumpZ<=.01&&b.stuckJumpCooldown<=0){
+          b.jumpVel=245;
+          b.stuckJumpCooldown=3.5;
+          b.jumpCooldown=Math.max(b.jumpCooldown||0,2.8);
+        }
         b.idleFor=0;
       }
     }else{
@@ -2209,10 +2221,10 @@ function renderWorld(){
     const isBunker=hitCell==="B";
     const fullWh=Math.min(h*1.6,(h*TILE)/Math.max(d,1));
     const wallBottom=horizon+fullWh*cameraHeight;
-    const wallTop=isBunker ? wallBottom-fullWh*.58 : horizon-fullWh*(1-cameraHeight);
+    const wallTop=horizon-fullWh*(1-cameraHeight);
     const depth=Math.max(0,Math.min(1,d/1100));
     const wallColor=isBunker
-      ? mixHex("#777b78","#343837",depth*.72)
+      ? mixHex("#8d918d","#3d4140",depth*.68)
       : mixHex(theme.wall,theme.wallDark,depth*.82);
     ctx.fillStyle=wallColor;
     ctx.fillRect(x,wallTop,step+1,wallBottom-wallTop);
@@ -2233,23 +2245,15 @@ function renderWorld(){
     ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.49,step+1,2);
 
     if(isBunker && wallBottom-wallTop>24){
-      // Concrete cap.
-      ctx.fillStyle="rgba(230,235,226,.20)";
-      ctx.fillRect(x,wallTop,step+1,Math.max(2,(wallBottom-wallTop)*.07));
-
-      // Horizontal firing slit through the bunker face.
-      const slitY=wallTop+(wallBottom-wallTop)*.34;
-      const slitH=Math.max(4,(wallBottom-wallTop)*.14);
-      ctx.fillStyle="#080b0c";
+      // Full concrete bunker wall + compact firing slit.
+      ctx.fillStyle="rgba(235,238,232,.16)";
+      ctx.fillRect(x,wallTop,step+1,Math.max(2,(wallBottom-wallTop)*.05));
+      const slitY=wallTop+(wallBottom-wallTop)*.40;
+      const slitH=Math.max(3,(wallBottom-wallTop)*.085);
+      ctx.fillStyle="#0a0d0e";
       ctx.fillRect(x,slitY,step+1,slitH);
-
-      // Dark metal gun/barrel visible through the slit.
-      ctx.fillStyle="#252b2e";
-      ctx.fillRect(x,slitY+slitH*.38,step+1,Math.max(2,slitH*.30));
-
-      // Lower reinforced concrete band.
-      ctx.fillStyle="rgba(20,24,24,.24)";
-      ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.74,step+1,(wallBottom-wallTop)*.26);
+      ctx.fillStyle="rgba(18,22,23,.28)";
+      ctx.fillRect(x,wallTop+(wallBottom-wallTop)*.82,step+1,(wallBottom-wallTop)*.18);
     }
   }
 
