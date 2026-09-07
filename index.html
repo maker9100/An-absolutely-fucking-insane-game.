@@ -268,7 +268,7 @@ button{font:inherit}
   <div id="healthBarTrack"><div id="healthBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-07 TACTICAL AI + COLOR MAPS</div>
+<div id="buildBadge">BUILD 2026-09-07 OPERATION LEGS</div>
 
 
 <canvas id="game"></canvas>
@@ -1878,6 +1878,58 @@ function drawSoldierModel(e,sx,baseY,sz){
 
   // slight bob so units feel less cardboard-like
   const bob=Math.sin((e.x+e.y)*.03 + gameTime*6)*sz*.012;
+
+  // ===== OPERATION LEGS =====
+  const modelJump=Math.max(0,Number(e.jumpZ)||0);
+  const modelCrouch=!!e.crouched;
+  const prevAnimX=(e._animLastX??e.x),prevAnimY=(e._animLastY??e.y);
+  const movedNow=Math.hypot((e.x??0)-prevAnimX,(e.y??0)-prevAnimY);
+  e._animLastX=e.x;e._animLastY=e.y;
+  e._walkPhase=(e._walkPhase||Math.random()*6.28)+Math.min(.42,movedNow*.075);
+  e._walkBlend=(e._walkBlend||0)+(Math.min(1,movedNow*.34)-(e._walkBlend||0))*.24;
+
+  const crouchDrop=modelCrouch?sz*.11:0;
+  const jumpTuck=Math.min(1,modelJump/22);
+  const hipY=baseY-sz*.46+bob+crouchDrop;
+  const thighLen=sz*(modelCrouch?.21:.28);
+  const shinLen=sz*(modelCrouch?.19:.27);
+  const hipSpread=sz*.105;
+  const walkAmp=(modelCrouch?.25:.58)*e._walkBlend*(1-jumpTuck*.7);
+
+  function legShade(hex,amt){
+    const n=parseInt(hex.slice(1),16),cl=v=>Math.max(0,Math.min(255,v));
+    return `rgb(${cl((n>>16)+amt)},${cl(((n>>8)&255)+amt)},${cl((n&255)+amt)})`;
+  }
+  function drawLeg(side){
+    const phase=e._walkPhase+(side<0?0:Math.PI);
+    const swing=Math.sin(phase)*walkAmp;
+    const lift=Math.max(0,Math.cos(phase))*sz*.045*e._walkBlend;
+    const hx=sx+side*hipSpread;
+    const kx=hx+side*sz*.015+swing*sz*.12;
+    const ky=hipY+thighLen-lift-jumpTuck*sz*.05;
+    const fx=kx+side*sz*.018+swing*sz*.10;
+    const fy=ky+shinLen-lift-jumpTuck*sz*.11;
+
+    ctx.lineCap="round";ctx.lineJoin="round";
+    ctx.strokeStyle=side<0?legShade(cloth,-30):legShade(cloth,-16);
+    ctx.lineWidth=Math.max(4,sz*.12);
+    ctx.beginPath();ctx.moveTo(hx,hipY);ctx.lineTo(kx,ky);ctx.stroke();
+
+    ctx.strokeStyle=side<0?legShade(cloth,-43):legShade(cloth,-28);
+    ctx.lineWidth=Math.max(4,sz*.105);
+    ctx.beginPath();ctx.moveTo(kx,ky);ctx.lineTo(fx,fy);ctx.stroke();
+
+    ctx.fillStyle="#252b2e";
+    ctx.beginPath();ctx.arc(kx,ky,Math.max(2,sz*.055),0,TWO_PI);ctx.fill();
+
+    ctx.save();ctx.translate(fx,fy);ctx.rotate(swing*.16);
+    ctx.fillStyle=boot;ctx.fillRect(-sz*.055,-sz*.025,sz*.16,sz*.075);
+    ctx.fillStyle="#353c3f";ctx.fillRect(-sz*.04,sz*.027,sz*.145,sz*.022);
+    ctx.restore();
+  }
+
+  drawLeg(-1);
+  drawLeg(1);
 
   // torso base
   ctx.fillStyle=cloth;
