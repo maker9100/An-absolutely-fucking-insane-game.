@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 INFINITY RESPAWN + PROTECTION</div>
+<div id="buildBadge">BUILD 2026-09-08 KILLING BOSS</div>
 
 
 <canvas id="game"></canvas>
@@ -357,10 +357,10 @@ button{font:inherit}
         <span>무한 처형 · 4초 부활 · 5분 동안 최다 킬</span>
         <span class="modeTag">PLAYABLE</span>
       </button>
-      <button class="modeCard" data-mode="KILLING_BOSS" disabled>
+      <button class="modeCard" data-mode="KILLING_BOSS">
         <b>KILLING BOSS</b>
-        <span>1 VS 13 · 보스 HP/Shield ×13 · 한쪽 전멸 시 종료</span>
-        <span class="modeTag">COMING SOON</span>
+        <span>1 VS 13 · YOU = BOSS · HP 1300 / Shield 650 · 부활 없음</span>
+        <span class="modeTag">PLAYABLE</span>
       </button>
       <button class="modeCard" data-mode="OBJECT_CAPTURE" disabled>
         <b>OBJECT CAPTURE</b>
@@ -486,7 +486,7 @@ const GAME_MODE = Object.freeze({
   KILLING_BOSS:"KILLING_BOSS",
   OBJECT_CAPTURE:"OBJECT_CAPTURE"
 });
-const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION, GAME_MODE.SOLO_ELIMINATION, GAME_MODE.INFINITY_ELIMINATION]);
+const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION, GAME_MODE.SOLO_ELIMINATION, GAME_MODE.INFINITY_ELIMINATION, GAME_MODE.KILLING_BOSS]);
 let currentGameMode = GAME_MODE.TEAM_ELIMINATION;
 
 function openModeSelect(){
@@ -674,17 +674,24 @@ function ensureShieldState(e){
   if(!Number.isFinite(e.shield)) e.shield=SHIELD_MAX;
   if(!Number.isFinite(e.shieldRegenDelay)) e.shieldRegenDelay=0;
 }
+function entityMaxHp(e){
+  return currentGameMode===GAME_MODE.KILLING_BOSS && e===player ? BOSS_HP : 100;
+}
+function entityMaxShield(e){
+  return currentGameMode===GAME_MODE.KILLING_BOSS && e===player ? BOSS_SHIELD : SHIELD_MAX;
+}
 function resetEntityShield(e){
   if(!e)return;
-  e.shield=SHIELD_MAX;
+  e.shield=entityMaxShield(e);
   e.shieldRegenDelay=0;
 }
 function updateShieldRegen(e,dt){
   if(!e||!e.alive)return;
   ensureShieldState(e);
+  const maxShield=entityMaxShield(e);
   e.shieldRegenDelay=Math.max(0,e.shieldRegenDelay-dt);
-  if(e.shieldRegenDelay<=0 && e.shield<SHIELD_MAX){
-    e.shield=Math.min(SHIELD_MAX,e.shield+SHIELD_REGEN_RATE*dt);
+  if(e.shieldRegenDelay<=0 && e.shield<maxShield){
+    e.shield=Math.min(maxShield,e.shield+SHIELD_REGEN_RATE*dt);
   }
 }
 
@@ -699,8 +706,8 @@ function resetHealthOrbs(){
   healthOrbs=chosen.map(([x,y],i)=>({x:(x+.5)*TILE,y:(y+.5)*TILE,active:true,respawn:0,phase:i*2.1}));
 }
 function healWithOrb(e,o){
-  if(!e||!e.alive||!o.active||e.hp>=100)return false;
-  e.hp=Math.min(100,e.hp+HEALTH_ORB_HEAL);
+  if(!e||!e.alive||!o.active||e.hp>=entityMaxHp(e))return false;
+  e.hp=Math.min(entityMaxHp(e),e.hp+HEALTH_ORB_HEAL);
   o.active=false;o.respawn=HEALTH_ORB_RESPAWN;
   return true;
 }
@@ -886,6 +893,22 @@ function rebuildAIBots(){
 }
 rebuildAIBots();
 
+function rebuildBossBots(){
+  bots.length=0;
+  botSerial=0;
+  const pool=[...redSpawn,...blueSpawn];
+  for(let i=0;i<BOSS_ENEMY_COUNT;i++){
+    const base=pool[i%pool.length]||redSpawn[0];
+    const b=botAt(base,1,`HUNTER-${String(i+1).padStart(2,"0")}`);
+    // Spread extras slightly; rescueEntityFromWall will correct invalid cells.
+    const ring=Math.floor(i/pool.length);
+    b.x+=(ring?((i%2?1:-1)*TILE*.35):0);
+    b.y+=(ring?(((i%3)-1)*TILE*.30):0);
+    rescueEntityFromWall(b);
+    bots.push(b);
+  }
+} 
+
 let running = false;
 let onlineMode = false;
 let aimOn = false;
@@ -936,6 +959,9 @@ const ROUND_TIME_LIMIT = 120;
 const INFINITY_TIME_LIMIT = 300;
 const INFINITY_RESPAWN_DELAY = 4;
 const INFINITY_SPAWN_PROTECTION = 2;
+const BOSS_HP=1300;
+const BOSS_SHIELD=650;
+const BOSS_ENEMY_COUNT=13;
 let roundTimeLeft = ROUND_TIME_LIMIT;
 let roundTimerExpired = false;
 let infinityRespawnAt = new Map();
@@ -1315,7 +1341,7 @@ function spawnEntity(e){
   e.x=p[0]*TILE;
   e.y=p[1]*TILE;
   rescueEntityFromWall(e);
-  e.hp=100;
+  e.hp=entityMaxHp(e);
   resetEntityShield(e);
   e.alive=true;
   if(e===player) player.ammo=[30,12,999,6,1,50];
@@ -1518,12 +1544,18 @@ function resolveRoundTimeout(){
 }
 function updateRoundTimer(dt){
   if(onlineMode || matchState!==MATCH_STATE.PLAYING || roundOver)return;
+  if(currentGameMode===GAME_MODE.KILLING_BOSS)return;
   roundTimeLeft=Math.max(0,roundTimeLeft-dt);
   if(roundTimeLeft<=0) resolveRoundTimeout();
 }
 function renderRoundTimer(){
   const el=document.getElementById("roundTimer");
   if(!el)return;
+  if(currentGameMode===GAME_MODE.KILLING_BOSS){
+    el.textContent="NO LIMIT";
+    el.classList.remove("urgent");
+    return;
+  }
   const t=Math.max(0,Math.ceil(roundTimeLeft));
   const m=Math.floor(t/60),s=t%60;
   el.textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
@@ -1552,6 +1584,10 @@ function updateRoundHud(){
     if(br) br.textContent=Math.max(0,best);
     if(rr) rr.textContent="KILLS";
     if(rt) rt.textContent=`INFINITY${leader?` · ${entityDisplayName(leader)}`:""}`;
+  }else if(currentGameMode===GAME_MODE.KILLING_BOSS){
+    if(br) br.textContent="BOSS";
+    if(rr) rr.textContent=`${bots.filter(b=>b.alive).length}/13`;
+    if(rt) rt.textContent="KILLING BOSS";
   }else{
     if(br) br.textContent=blueRoundWins;
     if(rr) rr.textContent=redRoundWins;
@@ -1646,7 +1682,7 @@ function beginNextRound(){
   roundTimeLeft=ROUND_TIME_LIMIT;
   roundTimerExpired=false;
 
-  player.hp=100;
+  player.hp=currentGameMode===GAME_MODE.KILLING_BOSS?BOSS_HP:100;
   resetEntityShield(player);
   player.alive=true;
   player.invulnerableUntil=0;
@@ -1690,7 +1726,8 @@ function beginNextRound(){
 
 function startMatch(){
   onlineMode=false;
-  rebuildAIBots();
+  if(currentGameMode===GAME_MODE.KILLING_BOSS) rebuildBossBots();
+  else rebuildAIBots();
   currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];shieldOrbs=[];
   applyMap(currentMapIndex);
 
@@ -1710,6 +1747,8 @@ function startMatch(){
     notify(`SOLO ELIMINATION · 10 PLAYERS · ${MAPS[currentMapIndex].name}`);
   else if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION)
     notify(`INFINITY ELIMINATION · 5:00 · 10 PLAYERS · ${MAPS[currentMapIndex].name}`);
+  else if(currentGameMode===GAME_MODE.KILLING_BOSS)
+    notify(`KILLING BOSS · YOU VS 13 · HP ${BOSS_HP} / SH ${BOSS_SHIELD} · ${MAPS[currentMapIndex].name}`);
   else
     notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
@@ -1778,6 +1817,17 @@ function checkRoundEnd(){
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
 
   if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION) return;
+  if(currentGameMode===GAME_MODE.KILLING_BOSS){
+    const huntersAlive=bots.filter(b=>b.alive).length;
+    if(!player.alive){
+      roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.2;
+      resetCheats();sfxRoundLose();notify("BOSS ELIMINATED · HUNTERS WIN");
+    }else if(huntersAlive===0){
+      roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.2;
+      resetCheats();sfxRoundWin();notify("13 HUNTERS ELIMINATED · BOSS WINS");
+    }
+    return;
+  }
   if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
     const alive=allEntities().filter(e=>e.alive);
     if(alive.length===1) finishSoloRound(alive[0]);
@@ -3342,6 +3392,8 @@ function renderWorld(){
     ui.topInfo.textContent=`FFA · LEADER ${leader?entityDisplayName(leader):"-"} ${leader?.kills||0} KILLS · ${MAPS[currentMapIndex].name}`;
   }else if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
     ui.topInfo.textContent=`FFA · ${allEntities().filter(e=>e.alive).length} ALIVE · ${MAPS[currentMapIndex].name}`;
+  }else if(currentGameMode===GAME_MODE.KILLING_BOSS){
+    ui.topInfo.textContent=`BOSS ${Math.ceil(player.hp)}/${BOSS_HP} HP · ${Math.ceil(player.shield||0)}/${BOSS_SHIELD} SH · HUNTERS ${bots.filter(b=>b.alive).length}/13 · ${MAPS[currentMapIndex].name}`;
   }else{
     ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
   }
@@ -3356,13 +3408,13 @@ function renderWorld(){
   ui.hp.textContent=`HEALTH ${hudHp}`;
   const hbFill=document.getElementById("healthBarFill");
   const hbValue=document.getElementById("healthBarValue");
-  if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,hudHp))}%`;
+  if(hbFill) hbFill.style.width=`${Math.max(0,Math.min(100,hudHp/entityMaxHp(hudActor)*100))}%`;
   if(hbValue) hbValue.textContent=hudHp;
   ensureShieldState(hudActor);
   const hudShield=Math.max(0,Math.ceil(hudActor.shield||0));
   const sbFill=document.getElementById("shieldBarFill");
   const sbValue=document.getElementById("shieldBarValue");
-  if(sbFill) sbFill.style.width=`${Math.max(0,Math.min(100,hudShield/SHIELD_MAX*100))}%`;
+  if(sbFill) sbFill.style.width=`${Math.max(0,Math.min(100,hudShield/entityMaxShield(hudActor)*100))}%`;
   if(sbValue) sbValue.textContent=hudShield;
   const dn=document.getElementById("deathNotice");
   const inSpectator=!player.alive && !roundOver;
