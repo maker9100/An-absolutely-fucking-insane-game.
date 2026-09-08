@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 INFINITY ELIMINATION</div>
+<div id="buildBadge">BUILD 2026-09-08 INFINITY RESPAWN + PROTECTION</div>
 
 
 <canvas id="game"></canvas>
@@ -855,7 +855,7 @@ let botSerial=0;
 function botAt(pos, team, name){
   const load=BOT_LOADOUTS[botSerial++%BOT_LOADOUTS.length];
   return {
-    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,shield:SHIELD_MAX,shieldRegenDelay:0,team,name,nextShot:0,alive:true,kills:0,deaths:0,
+    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,shield:SHIELD_MAX,shieldRegenDelay:0,team,name,nextShot:0,alive:true,kills:0,deaths:0,invulnerableUntil:0,
     strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI,
     path:[],pathIndex:0,repath:0,targetUid:null,targetCell:"",
     stuckFor:0,lastX:pos[0]*TILE,lastY:pos[1]*TILE,
@@ -935,6 +935,7 @@ const ROUNDS_TO_WIN = 7;
 const ROUND_TIME_LIMIT = 120;
 const INFINITY_TIME_LIMIT = 300;
 const INFINITY_RESPAWN_DELAY = 4;
+const INFINITY_SPAWN_PROTECTION = 2;
 let roundTimeLeft = ROUND_TIME_LIMIT;
 let roundTimerExpired = false;
 let infinityRespawnAt = new Map();
@@ -1366,26 +1367,52 @@ function killEntity(victim,killer){
     if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
       victim.respawnAt=gameTime+INFINITY_RESPAWN_DELAY;
       infinityRespawnAt.set(victim,victim.respawnAt);
+      // Keep the match running: Infinity deaths are temporary, never round-ending.
+      roundOver=false;
     }
   }else{
     if(killerTeam===0)scoreB++;else scoreR++;
     if(killer===player)player.kills++;
   }
   addKillFeed(entityDisplayName(killer),entityDisplayName(victim),WEAPONS[weaponIndex]?.name||"AR",killerTeam,killer===player);
-  if(victim===player){if(currentGameMode!==GAME_MODE.SOLO_ELIMINATION)player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget()}
+  if(victim===player){
+    if(currentGameMode!==GAME_MODE.SOLO_ELIMINATION && currentGameMode!==GAME_MODE.INFINITY_ELIMINATION) player.deaths++;
+    player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;
+    ensureSpectateTarget();
+  }
   checkRoundEnd();
 }
 
 
 function infinityRespawnEntity(e){
   if(currentGameMode!==GAME_MODE.INFINITY_ELIMINATION || !e || e.alive) return;
-  spawnEntity(e);
+
+  // FFA respawns use the whole map's spawn pool instead of the old team-only spawn.
+  const pool=[playerSpawn,...blueSpawn,...redSpawn];
+  let p=pool[Math.floor(Math.random()*pool.length)]||playerSpawn;
+  e.x=p[0]*TILE;e.y=p[1]*TILE;
+  rescueEntityFromWall(e);
+  e.hp=100;
+  resetEntityShield(e);
+  e.alive=true;
+  e.nextShot=0;
+  e.jumpZ=0;e.jumpVel=0;e.crouched=false;e.crouchBlend=0;
+  e.invulnerableUntil=gameTime+INFINITY_SPAWN_PROTECTION;
   e.respawnAt=0;
   infinityRespawnAt.delete(e);
+
   if(e===player){
+    player.ammo=[30,12,999,6,1,50];
     setSpectateTarget(null);
+    player.landingKick=0;
+    crouchTouch=false;
+    ui.crouch?.classList.remove("on");
     cameraPitch=0;recoilPitch=0;recoilKick=0;recoilSide=0;
-    notify("RESPAWN");
+    reloading=false;reloadWeaponIndex=-1;
+    damageFlash=0;
+    notify(`RESPAWN · PROTECTED ${INFINITY_SPAWN_PROTECTION}s`);
+  }else{
+    resetBotNavigation(e);
   }
 }
 
@@ -1412,6 +1439,7 @@ function spawnBlood(target){
 
 function resetEntityForRound(e, spawn){
   e.alive=true;
+  e.invulnerableUntil=0;
   e.hp=100;
   resetEntityShield(e);
   e.x=spawn[0]*TILE;
@@ -1621,6 +1649,7 @@ function beginNextRound(){
   player.hp=100;
   resetEntityShield(player);
   player.alive=true;
+  player.invulnerableUntil=0;
   player.x=playerSpawn[0]*TILE;
   player.y=playerSpawn[1]*TILE;
   player.a=0;
@@ -1762,8 +1791,21 @@ function checkRoundEnd(){
   else if(blueAlive===0) finishRound(1);
 }
 
+function hasSpawnProtection(e){
+  return currentGameMode===GAME_MODE.INFINITY_ELIMINATION &&
+    !!e && e.alive && (e.invulnerableUntil||0)>gameTime;
+}
+
 function damageTarget(target,amount,shooter){
   if(!target||!target.alive)return;
+  if(hasSpawnProtection(target)){
+    // Spawn protection is true immunity: no shield loss, HP loss, blood, or hurt flash.
+    if(shooter===player&&target!==player){
+      hitMarker=.07;
+      hitMarkerKill=false;
+    }
+    return;
+  }
   ensureShieldState(target);
   target.shieldRegenDelay=SHIELD_REGEN_DELAY;
   if(target.shield>0){
@@ -2478,7 +2520,8 @@ function updateBots(dt){
 
 
 function drawSoldierModel(e,sx,baseY,sz){
-  const enemy=e.team===1;
+  const ffaMode=currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION;
+  const enemy=ffaMode ? e!==player : e.team===1;
   const cloth=enemy?"#6f3e41":"#3d6280";
   const clothHi=enemy?"#a35a5e":"#5a8ab0";
   const clothLo=enemy?"#3b2123":"#213949";
@@ -2492,6 +2535,15 @@ function drawSoldierModel(e,sx,baseY,sz){
   const patch=enemy?"#e46f6c":"#82d0f1";
 
   ctx.save();
+
+  if(hasSpawnProtection(e)){
+    const pulse=.35+.35*Math.sin(gameTime*14);
+    ctx.strokeStyle=`rgba(255,255,255,${.45+pulse*.5})`;
+    ctx.lineWidth=Math.max(2,sz*.025);
+    ctx.beginPath();
+    ctx.arc(sx,baseY-sz*.55,sz*.39,0,TWO_PI);
+    ctx.stroke();
+  }
 
   // soft ground shadow
   ctx.fillStyle="rgba(0,0,0,.26)";
@@ -3321,10 +3373,11 @@ function renderWorld(){
       const target=ensureSpectateTarget();
       st.style.display="block";
       if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
-        const remain=Math.max(0,Math.ceil((player.respawnAt||gameTime)-gameTime));
+        const remain=Math.max(0,(player.respawnAt||gameTime)-gameTime);
+        const remainText=(Math.ceil(remain*10)/10).toFixed(1);
         st.textContent=target
-          ? `RESPAWN ${remain}s · SPECTATING ${target.name} · TAP / CLICK = NEXT`
-          : `RESPAWN ${remain}s`;
+          ? `RESPAWN IN ${remainText}s · SPECTATING ${target.name} · TAP / CLICK = NEXT`
+          : `RESPAWN IN ${remainText}s`;
       }else if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
         st.textContent=target
           ? `SPECTATING ${target.name} · TAP / CLICK = NEXT`
@@ -3337,11 +3390,16 @@ function renderWorld(){
     }else st.style.display="none";
   }
   if(ui.movementState){
-    ui.movementState.textContent=player.crouched
-      ? "CROUCHING"
-      : player.jumpZ>0
-        ? (player.jumpVel>0 ? "JUMPING ↑" : "FALLING ↓")
-        : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
+    if(player.alive && hasSpawnProtection(player)){
+      const protectLeft=Math.max(0,player.invulnerableUntil-gameTime);
+      ui.movementState.textContent=`SPAWN PROTECTION · ${protectLeft.toFixed(1)}s`;
+    }else{
+      ui.movementState.textContent=player.crouched
+        ? "CROUCHING"
+        : player.jumpZ>0
+          ? (player.jumpVel>0 ? "JUMPING ↑" : "FALLING ↓")
+          : (TOUCH?"JUMP · CROUCH":"SPACE JUMP · CTRL/C CROUCH");
+    }
   }
   const wp=WEAPONS[viewWeapon];
   ui.ammo.textContent=spectating?`${wp.name} · SPECTATING`:(viewWeapon===2?`${wp.name} ∞`:`${wp.name} ${player.ammo[player.weapon]} / ${wp.mag}`);
