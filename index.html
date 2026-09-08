@@ -257,6 +257,41 @@ button{font:inherit}
 #combatToast.show{animation:combatToast .5s ease-out}@keyframes combatToast{0%{opacity:0;transform:translate(-50%,-46%) scale(.8)}25%{opacity:1}100%{opacity:0;transform:translate(-50%,-58%) scale(1.08)}}
 @media(max-width:700px){#killFeed{top:calc(150px + var(--safeT));width:58vw;font-size:9px}.killEntry{padding:5px 6px}#reloadIndicator{bottom:calc(186px + var(--safeB));width:170px}}
 
+
+/* ===== LOCAL MODE SELECT ===== */
+#modeSelect{
+  position:fixed;inset:0;z-index:71;
+  display:flex;align-items:center;justify-content:center;
+  padding:22px;background:radial-gradient(circle at 50% 25%,rgba(42,50,55,.96),rgba(7,9,11,.985) 68%);
+}
+#modeSelect.hidden{display:none}
+#modeSelectCard{
+  width:min(760px,94vw);max-height:88vh;overflow:auto;
+  padding:22px;border:1px solid rgba(255,255,255,.18);border-radius:12px;
+  background:rgba(15,18,20,.96);box-shadow:0 18px 70px rgba(0,0,0,.6);
+}
+#modeSelectCard h2{margin:0 0 4px;font:900 27px Arial;letter-spacing:.08em;color:#fff}
+#modeSelectCard .modeSub{margin:0 0 16px;color:#aeb7bd;font:13px Arial}
+#modeGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.modeCard{
+  min-height:112px;padding:14px;text-align:left;border-radius:9px;
+  border:1px solid rgba(255,255,255,.16);background:#171c1f;color:#fff;
+  cursor:pointer;transition:transform .1s ease,border-color .1s ease,background .1s ease;
+}
+.modeCard:not(:disabled):active{transform:scale(.985)}
+.modeCard:not(:disabled):hover{border-color:#dfb866;background:#20272b}
+.modeCard b{display:block;font:900 16px Arial;letter-spacing:.04em;margin-bottom:5px}
+.modeCard span{display:block;color:#b9c1c6;font:12px/1.45 Arial}
+.modeCard .modeTag{margin-top:8px;color:#ffd27a;font:800 11px Arial;letter-spacing:.08em}
+.modeCard:disabled{cursor:not-allowed;opacity:.48;filter:saturate(.55)}
+#modeBack{width:100%;margin-top:12px}
+@media(max-width:650px){
+  #modeSelect{padding:10px}
+  #modeSelectCard{padding:15px}
+  #modeGrid{grid-template-columns:1fr}
+  .modeCard{min-height:92px}
+}
+
 </style>
 </head>
 <body>
@@ -287,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 ESP SHIELD FIX</div>
+<div id="buildBadge">BUILD 2026-09-08 MODE SELECT</div>
 
 
 <canvas id="game"></canvas>
@@ -296,10 +331,45 @@ button{font:inherit}
   <h1>CHEAT ARENA</h1>
   <p>5 VS 5 AI FPS · 6 WEAPONS · MAC + NO RECOIL</p>
   
-  <button id="startAI" class="menuButton primary">AI 5v5 시작</button>
-  <button id="online" class="menuButton">ONLINE 5v5 (Firebase)</button>
+  <button id="startAI" class="menuButton primary">AI 전투</button>
+  <button id="online" class="menuButton">ONLINE · RANDOM MODE</button>
   <button id="soundToggle" class="menuButton">SOUND : ON</button>
   <p id="serverText">GitHub Pages 클라이언트 · ONLINE = Firebase</p>
+</div>
+
+<div id="modeSelect" class="hidden">
+  <div id="modeSelectCard">
+    <h2>SELECT MODE</h2>
+    <p class="modeSub">LOCAL AI · 원하는 게임 모드를 선택</p>
+    <div id="modeGrid">
+      <button class="modeCard" data-mode="TEAM_ELIMINATION">
+        <b>TEAM ELIMINATION</b>
+        <span>5 VS 5 · 부활 없음 · 상대 팀 전멸 · 7선승</span>
+        <span class="modeTag">PLAYABLE</span>
+      </button>
+      <button class="modeCard" data-mode="SOLO_ELIMINATION" disabled>
+        <b>SOLO ELIMINATION</b>
+        <span>개인 처형 · 부활 없음 · 최후의 1인 · 7승</span>
+        <span class="modeTag">COMING SOON</span>
+      </button>
+      <button class="modeCard" data-mode="INFINITY_ELIMINATION" disabled>
+        <b>INFINITY ELIMINATION</b>
+        <span>무한 처형 · 부활 가능 · 제한시간 내 최다 킬</span>
+        <span class="modeTag">COMING SOON</span>
+      </button>
+      <button class="modeCard" data-mode="KILLING_BOSS" disabled>
+        <b>KILLING BOSS</b>
+        <span>1 VS 13 · 보스 HP/Shield ×13 · 한쪽 전멸 시 종료</span>
+        <span class="modeTag">COMING SOON</span>
+      </button>
+      <button class="modeCard" data-mode="OBJECT_CAPTURE" disabled>
+        <b>OBJECT CAPTURE</b>
+        <span>팀전 · 거점 점령/방어 · 점령 점수 경쟁</span>
+        <span class="modeTag">COMING SOON</span>
+      </button>
+    </div>
+    <button id="modeBack" class="menuButton">메인 메뉴</button>
+  </div>
 </div>
 
 <div id="weaponBar" class="hidden">
@@ -391,7 +461,7 @@ const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Canvas 2D context unavailable.");
 
 const ui = {
-  menu:$("menu"), startAI:$("startAI"), online:$("online"),
+  menu:$("menu"), startAI:$("startAI"), online:$("online"), modeSelect:$("modeSelect"), modeBack:$("modeBack"),
   weaponBar:$("weaponBar"), topInfo:$("topInfo"), leftHud:$("leftHud"),
   cheatHud:$("cheatHud"), crosshair:$("crosshair"), touchUI:$("touchUI"),
   roundHud:$("roundHud"), healthBarWrap:$("healthBarWrap"),
@@ -408,6 +478,34 @@ const TOUCH = (navigator.maxTouchPoints || 0) > 0 && coarse;
 const TILE = 64;
 const FOV = 103*Math.PI/180;
 const TWO_PI = Math.PI * 2;
+
+const GAME_MODE = Object.freeze({
+  TEAM_ELIMINATION:"TEAM_ELIMINATION",
+  SOLO_ELIMINATION:"SOLO_ELIMINATION",
+  INFINITY_ELIMINATION:"INFINITY_ELIMINATION",
+  KILLING_BOSS:"KILLING_BOSS",
+  OBJECT_CAPTURE:"OBJECT_CAPTURE"
+});
+const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION]);
+let currentGameMode = GAME_MODE.TEAM_ELIMINATION;
+
+function openModeSelect(){
+  ui.menu.classList.add("hidden");
+  ui.modeSelect.classList.remove("hidden");
+}
+function closeModeSelect(){
+  ui.modeSelect.classList.add("hidden");
+  ui.menu.classList.remove("hidden");
+}
+function startSelectedLocalMode(mode){
+  if(!IMPLEMENTED_MODES.includes(mode)) return;
+  currentGameMode=mode;
+  ui.modeSelect.classList.add("hidden");
+  startMatch();
+}
+function chooseRandomImplementedMode(){
+  return IMPLEMENTED_MODES[Math.floor(Math.random()*IMPLEMENTED_MODES.length)];
+}
 
 const MAPS = [
   {
@@ -1379,6 +1477,8 @@ function enterLobby(){
   document.exitPointerLock?.();
 
   setMatchUi(false);
+  ui.modeSelect?.classList.add("hidden");
+  ui.menu?.classList.remove("hidden");
 
   const dn=document.getElementById("deathNotice");
   if(dn) dn.style.display="none";
@@ -1469,7 +1569,7 @@ function startMatch(){
   resetMatchScore();
   setMatchUi(true);
   beginNextRound();
-  notify(`AI 5v5 · RANDOM MAP: ${MAPS[currentMapIndex].name}`);
+  notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
 
 function finishMatch(winnerTeam){
@@ -1727,8 +1827,18 @@ function resetCheats(){
   recoilSide=0;
 }
 
-ui.startAI.addEventListener("click",()=>{ensureAudio();startMatch();});
-ui.online.addEventListener("click",()=>{ensureAudio();openOnlinePanel();});
+ui.startAI.addEventListener("click",()=>{ensureAudio();openModeSelect();});
+ui.modeBack?.addEventListener("click",()=>closeModeSelect());
+document.querySelectorAll(".modeCard[data-mode]").forEach(btn=>{
+  btn.addEventListener("click",()=>startSelectedLocalMode(btn.dataset.mode));
+});
+ui.online.addEventListener("click",()=>{
+  ensureAudio();
+  // ONLINE will choose randomly from modes that are actually implemented.
+  // As new modes become playable, adding them to IMPLEMENTED_MODES activates them online too.
+  currentGameMode=chooseRandomImplementedMode();
+  openOnlinePanel();
+});
 $("soundToggle")?.addEventListener("click",()=>setSoundEnabled(!audioFX.enabled));
 setSoundEnabled(audioFX.enabled);
 
