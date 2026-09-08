@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 KILLING BOSS</div>
+<div id="buildBadge">BUILD 2026-09-08 ALL MODES</div>
 
 
 <canvas id="game"></canvas>
@@ -359,13 +359,13 @@ button{font:inherit}
       </button>
       <button class="modeCard" data-mode="KILLING_BOSS">
         <b>KILLING BOSS</b>
-        <span>1 VS 13 · YOU = BOSS · HP 1300 / Shield 650 · 부활 없음</span>
+        <span>1 VS 9 · YOU = BOSS · HP 2000 / Shield 1000 · 부활 없음</span>
         <span class="modeTag">PLAYABLE</span>
       </button>
-      <button class="modeCard" data-mode="OBJECT_CAPTURE" disabled>
+      <button class="modeCard" data-mode="OBJECT_CAPTURE">
         <b>OBJECT CAPTURE</b>
-        <span>팀전 · 거점 점령/방어 · 점령 점수 경쟁</span>
-        <span class="modeTag">COMING SOON</span>
+        <span>5 VS 5 · A/B/C 거점 · 100점 선취 · 5초 부활</span>
+        <span class="modeTag">PLAYABLE</span>
       </button>
     </div>
     <button id="modeBack" class="menuButton">메인 메뉴</button>
@@ -486,7 +486,7 @@ const GAME_MODE = Object.freeze({
   KILLING_BOSS:"KILLING_BOSS",
   OBJECT_CAPTURE:"OBJECT_CAPTURE"
 });
-const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION, GAME_MODE.SOLO_ELIMINATION, GAME_MODE.INFINITY_ELIMINATION, GAME_MODE.KILLING_BOSS]);
+const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION, GAME_MODE.SOLO_ELIMINATION, GAME_MODE.INFINITY_ELIMINATION, GAME_MODE.KILLING_BOSS, GAME_MODE.OBJECT_CAPTURE]);
 let currentGameMode = GAME_MODE.TEAM_ELIMINATION;
 
 function openModeSelect(){
@@ -959,9 +959,17 @@ const ROUND_TIME_LIMIT = 120;
 const INFINITY_TIME_LIMIT = 300;
 const INFINITY_RESPAWN_DELAY = 4;
 const INFINITY_SPAWN_PROTECTION = 2;
-const BOSS_HP=1300;
-const BOSS_SHIELD=650;
-const BOSS_ENEMY_COUNT=13;
+const BOSS_HP=2000;
+const BOSS_SHIELD=1000;
+const BOSS_ENEMY_COUNT=9;
+const CAPTURE_SCORE_TO_WIN=100;
+const CAPTURE_RESPAWN_DELAY=5;
+const CAPTURE_RADIUS=52;
+const CAPTURE_RATE=34;
+const CAPTURE_SCORE_RATE=2.2;
+let captureZones=[];
+let captureScoreBlue=0;
+let captureScoreRed=0;
 let roundTimeLeft = ROUND_TIME_LIMIT;
 let roundTimerExpired = false;
 let infinityRespawnAt = new Map();
@@ -1349,6 +1357,51 @@ function spawnEntity(e){
 }
 
 
+function nearestOpenWorld(tx,ty){
+  const gx0=Math.max(1,Math.min(MAP[0].length-2,Math.floor(tx)));
+  const gy0=Math.max(1,Math.min(MAP.length-2,Math.floor(ty)));
+  for(let r=0;r<12;r++)for(let y=gy0-r;y<=gy0+r;y++)for(let x=gx0-r;x<=gx0+r;x++){
+    if(y>0&&y<MAP.length-1&&x>0&&x<MAP[y].length-1&&MAP[y][x]===".")return{x:(x+.5)*TILE,y:(y+.5)*TILE};
+  }
+  return{x:playerSpawn[0]*TILE,y:playerSpawn[1]*TILE};
+}
+function resetCaptureZones(){
+  const w=MAP[0].length,hh=MAP.length,seeds=[[w*.30,hh*.35],[w*.50,hh*.58],[w*.70,hh*.35]];
+  captureZones=seeds.map((s,i)=>{const p=nearestOpenWorld(s[0],s[1]);return{id:String.fromCharCode(65+i),x:p.x,y:p.y,progress:0,owner:-1};});
+  captureScoreBlue=0;captureScoreRed=0;
+}
+function captureRespawnEntity(e){
+  if(currentGameMode!==GAME_MODE.OBJECT_CAPTURE||!e||e.alive)return;
+  spawnEntity(e);e.respawnAt=0;
+  if(e===player){setSpectateTarget(null);cameraPitch=0;recoilPitch=0;notify("RESPAWN");}
+}
+function updateCaptureMode(dt){
+  if(currentGameMode!==GAME_MODE.OBJECT_CAPTURE||matchState!==MATCH_STATE.PLAYING||roundOver)return;
+  for(const e of allEntities())if(!e.alive&&(e.respawnAt||0)>0&&gameTime>=e.respawnAt)captureRespawnEntity(e);
+  for(const z of captureZones){
+    const blue=allEntities().filter(e=>e.alive&&e.team===0&&dist(e,z)<=CAPTURE_RADIUS).length;
+    const red=allEntities().filter(e=>e.alive&&e.team===1&&dist(e,z)<=CAPTURE_RADIUS).length;
+    if(blue&&red)continue;
+    const side=blue?0:(red?1:-1);if(side<0)continue;
+    const dir=side===0?1:-1,strength=Math.min(2,side===0?blue:red);
+    z.progress=Math.max(-100,Math.min(100,z.progress+dir*CAPTURE_RATE*strength*dt));
+    if(z.progress>=100)z.owner=0;else if(z.progress<=-100)z.owner=1;
+    else if((z.owner===0&&z.progress<35)||(z.owner===1&&z.progress>-35))z.owner=-1;
+  }
+  const bo=captureZones.filter(z=>z.owner===0).length,ro=captureZones.filter(z=>z.owner===1).length;
+  captureScoreBlue=Math.min(100,captureScoreBlue+bo*CAPTURE_SCORE_RATE*dt);
+  captureScoreRed=Math.min(100,captureScoreRed+ro*CAPTURE_SCORE_RATE*dt);
+  if(captureScoreBlue>=100||captureScoreRed>=100){
+    roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.4;resetCheats();
+    const win=captureScoreBlue>=100;if(win)sfxRoundWin();else sfxRoundLose();notify(win?"BLUE CAPTURE WIN":"RED CAPTURE WIN");
+  }
+}
+function nearestCaptureZoneForBot(b){
+  if(!captureZones.length)return null;
+  const p=captureZones.filter(z=>z.owner!==b.team),list=p.length?p:captureZones;
+  return list.reduce((best,z)=>!best||dist(b,z)<dist(b,best)?z:best,null);
+}
+
 function entityDisplayName(e){
   if(!e)return"WORLD";
   if(e===player)return onlineMode?(String($("onlineNickname")?.value||"YOU").trim().slice(0,12)||"YOU"):"YOU";
@@ -1401,6 +1454,7 @@ function killEntity(victim,killer){
     if(killer===player)player.kills++;
   }
   addKillFeed(entityDisplayName(killer),entityDisplayName(victim),WEAPONS[weaponIndex]?.name||"AR",killerTeam,killer===player);
+  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE) victim.respawnAt=gameTime+CAPTURE_RESPAWN_DELAY;
   if(victim===player){
     if(currentGameMode!==GAME_MODE.SOLO_ELIMINATION && currentGameMode!==GAME_MODE.INFINITY_ELIMINATION) player.deaths++;
     player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;
@@ -1544,14 +1598,14 @@ function resolveRoundTimeout(){
 }
 function updateRoundTimer(dt){
   if(onlineMode || matchState!==MATCH_STATE.PLAYING || roundOver)return;
-  if(currentGameMode===GAME_MODE.KILLING_BOSS)return;
+  if(currentGameMode===GAME_MODE.KILLING_BOSS||currentGameMode===GAME_MODE.OBJECT_CAPTURE)return;
   roundTimeLeft=Math.max(0,roundTimeLeft-dt);
   if(roundTimeLeft<=0) resolveRoundTimeout();
 }
 function renderRoundTimer(){
   const el=document.getElementById("roundTimer");
   if(!el)return;
-  if(currentGameMode===GAME_MODE.KILLING_BOSS){
+  if(currentGameMode===GAME_MODE.KILLING_BOSS||currentGameMode===GAME_MODE.OBJECT_CAPTURE){
     el.textContent="NO LIMIT";
     el.classList.remove("urgent");
     return;
@@ -1586,8 +1640,12 @@ function updateRoundHud(){
     if(rt) rt.textContent=`INFINITY${leader?` · ${entityDisplayName(leader)}`:""}`;
   }else if(currentGameMode===GAME_MODE.KILLING_BOSS){
     if(br) br.textContent="BOSS";
-    if(rr) rr.textContent=`${bots.filter(b=>b.alive).length}/13`;
+    if(rr) rr.textContent=`${bots.filter(b=>b.alive).length}/9`;
     if(rt) rt.textContent="KILLING BOSS";
+  }else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
+    if(br) br.textContent=Math.floor(captureScoreBlue);
+    if(rr) rr.textContent=Math.floor(captureScoreRed);
+    if(rt) rt.textContent=`CAPTURE · ${captureZones.map(z=>`${z.id}:${z.owner===0?"B":z.owner===1?"R":"-"}`).join(" ")}`;
   }else{
     if(br) br.textContent=blueRoundWins;
     if(rr) rr.textContent=redRoundWins;
@@ -1730,6 +1788,7 @@ function startMatch(){
   else rebuildAIBots();
   currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];shieldOrbs=[];
   applyMap(currentMapIndex);
+  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE) resetCaptureZones();
 
   if(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
     // FFA uses the existing 10-combatant roster. Teams remain as visual spawn groups only;
@@ -1748,7 +1807,9 @@ function startMatch(){
   else if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION)
     notify(`INFINITY ELIMINATION · 5:00 · 10 PLAYERS · ${MAPS[currentMapIndex].name}`);
   else if(currentGameMode===GAME_MODE.KILLING_BOSS)
-    notify(`KILLING BOSS · YOU VS 13 · HP ${BOSS_HP} / SH ${BOSS_SHIELD} · ${MAPS[currentMapIndex].name}`);
+    notify(`KILLING BOSS · YOU VS 9 · HP ${BOSS_HP} / SH ${BOSS_SHIELD} · ${MAPS[currentMapIndex].name}`);
+  else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE)
+    notify(`OBJECT CAPTURE · 5v5 · A/B/C · FIRST TO ${CAPTURE_SCORE_TO_WIN}`);
   else
     notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
@@ -1816,7 +1877,7 @@ function checkRoundEnd(){
   if(onlineMode) return;
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
 
-  if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION) return;
+  if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION || currentGameMode===GAME_MODE.OBJECT_CAPTURE) return;
   if(currentGameMode===GAME_MODE.KILLING_BOSS){
     const huntersAlive=bots.filter(b=>b.alive).length;
     if(!player.alive){
@@ -1824,7 +1885,7 @@ function checkRoundEnd(){
       resetCheats();sfxRoundLose();notify("BOSS ELIMINATED · HUNTERS WIN");
     }else if(huntersAlive===0){
       roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.2;
-      resetCheats();sfxRoundWin();notify("13 HUNTERS ELIMINATED · BOSS WINS");
+      resetCheats();sfxRoundWin();notify("9 HUNTERS ELIMINATED · BOSS WINS");
     }
     return;
   }
@@ -2426,6 +2487,10 @@ function updateBots(dt){
     }
 
     let faceA=angle(b,t);
+    if(currentGameMode===GAME_MODE.OBJECT_CAPTURE&&!b.retreating){
+      const zone=nearestCaptureZoneForBot(b);
+      if(zone&&!(sees&&d<170)){const za=angle(b,zone);desiredX+=Math.cos(za)*1.25;desiredY+=Math.sin(za)*1.25;if(!sees)faceA=za;}
+    }
 
     if(b.retreating){
       const rp=findBotRetreatPoint(b,t);
@@ -2902,6 +2967,14 @@ function drawMinimap(cam){
     ctx.fill();
   }
 
+  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
+    for(const z of captureZones){
+      const zx=ox+(z.x/TILE)*cell,zy=oy+(z.y/TILE)*cell;
+      ctx.fillStyle=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#f4d35e";ctx.beginPath();ctx.arc(zx,zy,Math.max(3.5,cell*.42),0,TWO_PI);ctx.fill();
+      ctx.fillStyle="#111";ctx.font="800 8px Arial";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(z.id,zx,zy);
+    }
+  }
+
   // Current viewpoint / player arrow.
   const px=ox+(cam.x/TILE)*cell,py=oy+(cam.y/TILE)*cell;
   const aa=cam.a||0;
@@ -2971,6 +3044,18 @@ function renderWorld(){
     const eyeScale=Math.max(.55,Math.min(1.45,cameraHeight/.50));
     const yy=horizon+(h-horizon)*Math.min(1,(i*i/81)*eyeScale);
     ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(w,yy);ctx.stroke();
+  }
+
+  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE&&running){
+    for(const z of captureZones){
+      const d=dist(cam,z),rel=norm(angle(cam,z)-viewAngle);
+      if(Math.abs(rel)<FOV/2+.25&&d>8){
+        const sx=w/2+(rel/(FOV/2))*(w/2),sy=horizon+Math.min(h*.28,2200/Math.max(30,d)),rr=Math.max(10,Math.min(34,1900/Math.max(50,d)));
+        ctx.save();ctx.globalAlpha=.88;ctx.strokeStyle=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#f4d35e";ctx.lineWidth=4;
+        ctx.beginPath();ctx.arc(sx,sy,rr,0,TWO_PI);ctx.stroke();ctx.fillStyle="rgba(0,0,0,.55)";ctx.beginPath();ctx.arc(sx,sy,rr*.72,0,TWO_PI);ctx.fill();
+        ctx.fillStyle="#fff";ctx.font=`800 ${Math.max(12,rr*.9)}px Arial`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(z.id,sx,sy);ctx.restore();
+      }
+    }
   }
 
   if(!running) return;
@@ -3394,6 +3479,8 @@ function renderWorld(){
     ui.topInfo.textContent=`FFA · ${allEntities().filter(e=>e.alive).length} ALIVE · ${MAPS[currentMapIndex].name}`;
   }else if(currentGameMode===GAME_MODE.KILLING_BOSS){
     ui.topInfo.textContent=`BOSS ${Math.ceil(player.hp)}/${BOSS_HP} HP · ${Math.ceil(player.shield||0)}/${BOSS_SHIELD} SH · HUNTERS ${bots.filter(b=>b.alive).length}/13 · ${MAPS[currentMapIndex].name}`;
+  }else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
+    ui.topInfo.textContent=`CAPTURE · BLUE ${Math.floor(captureScoreBlue)} : ${Math.floor(captureScoreRed)} RED · ${MAPS[currentMapIndex].name}`;
   }else{
     ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
   }
@@ -3424,7 +3511,7 @@ function renderWorld(){
     if(inSpectator){
       const target=ensureSpectateTarget();
       st.style.display="block";
-      if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+      if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION || currentGameMode===GAME_MODE.OBJECT_CAPTURE){
         const remain=Math.max(0,(player.respawnAt||gameTime)-gameTime);
         const remainText=(Math.ceil(remain*10)/10).toFixed(1);
         st.textContent=target
@@ -4290,6 +4377,7 @@ function loop(now){
       rescueEntityFromWall(player);
       updateRoundTimer(dt);
       updateInfinityRespawns();
+      updateCaptureMode(dt);
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
