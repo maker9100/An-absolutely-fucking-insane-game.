@@ -287,7 +287,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 BIG MAPS + CROSSBOW AI FIX</div>
+<div id="buildBadge">BUILD 2026-09-08 BIG MAPS + SPAWN FIX</div>
 
 
 <canvas id="game"></canvas>
@@ -953,6 +953,27 @@ function tileWall(gx,gy){
   return MAP[gy][gx]==="#";
 }
 
+
+function nearestSafeSpawn(x,y){
+  if(!circleHitsWall(x,y,BOT_RADIUS+3)) return {x,y};
+  const cx=Math.floor(x/TILE),cy=Math.floor(y/TILE);
+  for(let radius=1;radius<=10;radius++){
+    for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
+      if(Math.abs(ox)!==radius&&Math.abs(oy)!==radius)continue;
+      const nx=(cx+ox+.5)*TILE,ny=(cy+oy+.5)*TILE;
+      if(!circleHitsWall(nx,ny,BOT_RADIUS+3)) return {x:nx,y:ny};
+    }
+  }
+  return {x:TILE*1.5,y:TILE*1.5};
+}
+function rescueEntityFromWall(e){
+  if(!e)return;
+  if(circleHitsWall(e.x,e.y,BOT_RADIUS+2)){
+    const p=nearestSafeSpawn(e.x,e.y);
+    e.x=p.x;e.y=p.y;
+  }
+}
+
 function circleHitsWall(x,y,r=BOT_RADIUS){
   const minGX=Math.floor((x-r)/TILE), maxGX=Math.floor((x+r)/TILE);
   const minGY=Math.floor((y-r)/TILE), maxGY=Math.floor((y+r)/TILE);
@@ -1257,6 +1278,7 @@ function resetEntityForRound(e, spawn){
   resetEntityShield(e);
   e.x=spawn[0]*TILE;
   e.y=spawn[1]*TILE;
+  rescueEntityFromWall(e);
   e.nextShot=0;
   if(e!==player) resetBotNavigation(e);
 }
@@ -1974,6 +1996,7 @@ function updateBots(dt){
   if(onlineMode) return;
 
   for(const b of bots){
+    rescueEntityFromWall(b);
     if(!b.alive || b.remote) continue;
 
     const enemies=enemyList(b.team).filter(e=>e!==b);
@@ -3510,7 +3533,8 @@ function beginOnlineRound(room){
 
   player.team=Number(me.team)||0;
   const sp=onlineSpawnFor(player.team,online.user.uid,room);
-  player.x=sp[0]*TILE;player.y=sp[1]*TILE;player.a=0;
+  player.x=sp[0]*TILE;player.y=sp[1]*TILE;
+  rescueEntityFromWall(player);player.a=0;
   player.hp=100;resetEntityShield(player);player.alive=true;player.weapon=0;player.ammo=[30,12,999,6,1,50];
   player.nextShot=0;player.jumpZ=0;player.jumpVel=0;player.crouched=false;
   player.crouchBlend=0;player.landingKick=0;
@@ -3851,6 +3875,7 @@ function loop(now){
     }
 
     if(matchState===MATCH_STATE.PLAYING){
+      rescueEntityFromWall(player);
       updateRoundTimer(dt);
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
