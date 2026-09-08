@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 MODE SELECT</div>
+<div id="buildBadge">BUILD 2026-09-08 INFINITY ELIMINATION</div>
 
 
 <canvas id="game"></canvas>
@@ -347,15 +347,15 @@ button{font:inherit}
         <span>5 VS 5 · 부활 없음 · 상대 팀 전멸 · 7선승</span>
         <span class="modeTag">PLAYABLE</span>
       </button>
-      <button class="modeCard" data-mode="SOLO_ELIMINATION" disabled>
+      <button class="modeCard" data-mode="SOLO_ELIMINATION">
         <b>SOLO ELIMINATION</b>
         <span>개인 처형 · 부활 없음 · 최후의 1인 · 7승</span>
-        <span class="modeTag">COMING SOON</span>
+        <span class="modeTag">PLAYABLE</span>
       </button>
-      <button class="modeCard" data-mode="INFINITY_ELIMINATION" disabled>
+      <button class="modeCard" data-mode="INFINITY_ELIMINATION">
         <b>INFINITY ELIMINATION</b>
-        <span>무한 처형 · 부활 가능 · 제한시간 내 최다 킬</span>
-        <span class="modeTag">COMING SOON</span>
+        <span>무한 처형 · 4초 부활 · 5분 동안 최다 킬</span>
+        <span class="modeTag">PLAYABLE</span>
       </button>
       <button class="modeCard" data-mode="KILLING_BOSS" disabled>
         <b>KILLING BOSS</b>
@@ -486,7 +486,7 @@ const GAME_MODE = Object.freeze({
   KILLING_BOSS:"KILLING_BOSS",
   OBJECT_CAPTURE:"OBJECT_CAPTURE"
 });
-const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION]);
+const IMPLEMENTED_MODES = Object.freeze([GAME_MODE.TEAM_ELIMINATION, GAME_MODE.SOLO_ELIMINATION, GAME_MODE.INFINITY_ELIMINATION]);
 let currentGameMode = GAME_MODE.TEAM_ELIMINATION;
 
 function openModeSelect(){
@@ -855,7 +855,7 @@ let botSerial=0;
 function botAt(pos, team, name){
   const load=BOT_LOADOUTS[botSerial++%BOT_LOADOUTS.length];
   return {
-    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,shield:SHIELD_MAX,shieldRegenDelay:0,team,name,nextShot:0,alive:true,
+    x:pos[0]*TILE,y:pos[1]*TILE,a:0,hp:100,shield:SHIELD_MAX,shieldRegenDelay:0,team,name,nextShot:0,alive:true,kills:0,deaths:0,
     strafe:Math.random()<.5?-1:1,think:0,wander:Math.random()*TWO_PI,
     path:[],pathIndex:0,repath:0,targetUid:null,targetCell:"",
     stuckFor:0,lastX:pos[0]*TILE,lastY:pos[1]*TILE,
@@ -926,14 +926,18 @@ const bloodFx = [];
 let damageFlash = 0;
 let blueRoundWins = 0;
 let redRoundWins = 0;
+let soloRoundWins = new Map();
 let roundNumber = 1;
 let roundOver = false;
 let roundRestartAt = 0;
 let matchEndAt = 0;
 const ROUNDS_TO_WIN = 7;
 const ROUND_TIME_LIMIT = 120;
+const INFINITY_TIME_LIMIT = 300;
+const INFINITY_RESPAWN_DELAY = 4;
 let roundTimeLeft = ROUND_TIME_LIMIT;
 let roundTimerExpired = false;
+let infinityRespawnAt = new Map();
 const MATCH_STATE = Object.freeze({
   LOBBY:"LOBBY",
   PLAYING:"PLAYING",
@@ -1228,13 +1232,17 @@ function los(a,b){
 function allEntities(){
   return [player,...bots];
 }
-function enemyList(team){
+function enemyList(team,actor=null){
+  if((currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION)){
+    return allEntities().filter(e=>e.alive && e!==actor);
+  }
   return allEntities().filter(e=>e.alive && e.team!==team);
 }
 function aliveCount(team){
   return allEntities().filter(e=>e.alive && e.team===team).length;
 }
 function spectatorCandidates(){
+  if((currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION)) return bots.filter(b=>b.alive);
   return bots.filter(b=>b.team===player.team && b.alive);
 }
 
@@ -1254,7 +1262,8 @@ function ensureSpectateTarget(){
     setSpectateTarget(null);
     return null;
   }
-  if(!spectateTarget || !spectateTarget.alive || spectateTarget.team!==player.team){
+  if(!spectateTarget || !spectateTarget.alive ||
+     (currentGameMode!==GAME_MODE.SOLO_ELIMINATION && spectateTarget.team!==player.team)){
     setSpectateTarget(candidates[0]);
   }
   return spectateTarget;
@@ -1304,6 +1313,7 @@ function spawnEntity(e){
   }
   e.x=p[0]*TILE;
   e.y=p[1]*TILE;
+  rescueEntityFromWall(e);
   e.hp=100;
   resetEntityShield(e);
   e.alive=true;
@@ -1350,13 +1360,43 @@ function killEntity(victim,killer){
     return;
   }
   const killerTeam=killer===player?player.team:(killer?.team??1),weaponIndex=killer===player?player.weapon:0;
-  if(killerTeam===0)scoreB++;else scoreR++;
-  if(killer===player)player.kills++;
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+    if(killer && killer!==victim) killer.kills=(killer.kills||0)+1;
+    victim.deaths=(victim.deaths||0)+1;
+    if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+      victim.respawnAt=gameTime+INFINITY_RESPAWN_DELAY;
+      infinityRespawnAt.set(victim,victim.respawnAt);
+    }
+  }else{
+    if(killerTeam===0)scoreB++;else scoreR++;
+    if(killer===player)player.kills++;
+  }
   addKillFeed(entityDisplayName(killer),entityDisplayName(victim),WEAPONS[weaponIndex]?.name||"AR",killerTeam,killer===player);
-  if(victim===player){player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget()}
+  if(victim===player){if(currentGameMode!==GAME_MODE.SOLO_ELIMINATION)player.deaths++;player.crouched=false;player.jumpZ=0;player.jumpVel=0;firing=false;ensureSpectateTarget()}
   checkRoundEnd();
 }
 
+
+function infinityRespawnEntity(e){
+  if(currentGameMode!==GAME_MODE.INFINITY_ELIMINATION || !e || e.alive) return;
+  spawnEntity(e);
+  e.respawnAt=0;
+  infinityRespawnAt.delete(e);
+  if(e===player){
+    setSpectateTarget(null);
+    cameraPitch=0;recoilPitch=0;recoilKick=0;recoilSide=0;
+    notify("RESPAWN");
+  }
+}
+
+function updateInfinityRespawns(){
+  if(currentGameMode!==GAME_MODE.INFINITY_ELIMINATION || matchState!==MATCH_STATE.PLAYING) return;
+  for(const e of allEntities()){
+    if(!e.alive && (e.respawnAt||0)>0 && gameTime>=e.respawnAt){
+      infinityRespawnEntity(e);
+    }
+  }
+}
 
 function spawnBlood(target){
   if(!target) return;
@@ -1394,6 +1434,43 @@ function teamTimeoutValue(team){
 function resolveRoundTimeout(){
   if(onlineMode || matchState!==MATCH_STATE.PLAYING || roundOver || roundTimerExpired)return;
   roundTimerExpired=true;
+
+  if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+    const ranked=[...allEntities()].sort((a,b)=>(b.kills||0)-(a.kills||0));
+    const bestKills=ranked[0]?.kills||0;
+    const leaders=ranked.filter(e=>(e.kills||0)===bestKills);
+    roundOver=true;
+    firing=false;
+    matchState=MATCH_STATE.MATCH_END;
+    matchEndAt=gameTime+2.2;
+    resetCheats();
+    if(leaders.length===1){
+      const winner=leaders[0];
+      if(winner===player)sfxRoundWin();else sfxRoundLose();
+      notify(`${entityDisplayName(winner)} WINS · ${bestKills} KILLS`);
+    }else{
+      notify(`TIME UP · DRAW · ${bestKills} KILLS`);
+    }
+    return;
+  }
+
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
+    const alive=allEntities().filter(e=>e.alive);
+    if(alive.length===1){finishSoloRound(alive[0]);return;}
+    let best=null,bestValue=-1,tied=false;
+    for(const e of alive){
+      ensureShieldState(e);
+      const value=Math.max(0,e.hp||0)+Math.max(0,e.shield||0);
+      if(value>bestValue+.01){best=e;bestValue=value;tied=false}
+      else if(Math.abs(value-bestValue)<=.01){tied=true}
+    }
+    if(best&&!tied){finishSoloRound(best);return;}
+    roundOver=true;matchState=MATCH_STATE.ROUND_END;
+    notify("TIME UP · DRAW");
+    roundRestartAt=gameTime+1.6;
+    return;
+  }
+
   const blueAlive=(player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
   const redAlive=bots.filter(b=>b.team===1&&b.alive).length;
   if(blueAlive!==redAlive){
@@ -1429,9 +1506,29 @@ function updateRoundHud(){
   const br=document.getElementById("blueRounds");
   const rr=document.getElementById("redRounds");
   const rt=document.getElementById("roundTitle");
-  if(br) br.textContent=blueRoundWins;
-  if(rr) rr.textContent=redRoundWins;
-  if(rt) rt.textContent=`ROUND ${roundNumber}`;
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
+    let leader=null,best=-1;
+    for(const e of allEntities()){
+      const w=soloRoundWins.get(e)||0;
+      if(w>best){best=w;leader=e}
+    }
+    if(br) br.textContent=best>0?best:0;
+    if(rr) rr.textContent="FFA";
+    if(rt) rt.textContent=`SOLO · ROUND ${roundNumber}${leader&&best>0?` · ${entityDisplayName(leader)}`:""}`;
+  }else if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+    let leader=null,best=-1;
+    for(const e of allEntities()){
+      const k=e.kills||0;
+      if(k>best){best=k;leader=e}
+    }
+    if(br) br.textContent=Math.max(0,best);
+    if(rr) rr.textContent="KILLS";
+    if(rt) rt.textContent=`INFINITY${leader?` · ${entityDisplayName(leader)}`:""}`;
+  }else{
+    if(br) br.textContent=blueRoundWins;
+    if(rr) rr.textContent=redRoundWins;
+    if(rt) rt.textContent=`ROUND ${roundNumber}`;
+  }
 }
 
 function setMatchUi(inMatch){
@@ -1456,10 +1553,11 @@ function resetMatchScore(){
   roundNumber=1;
   roundRestartAt=0;
   matchEndAt=0;
-  roundTimeLeft=ROUND_TIME_LIMIT;
+  roundTimeLeft=currentGameMode===GAME_MODE.INFINITY_ELIMINATION?INFINITY_TIME_LIMIT:ROUND_TIME_LIMIT;
   roundTimerExpired=false;
   scoreB=0;
   scoreR=0;
+  soloRoundWins=new Map();
   player.kills=0;
   player.deaths=0;
   localShotSeq=0;
@@ -1558,7 +1656,7 @@ function beginNextRound(){
 
   updateRoundHud();
   sfxRound();
-  notify(`ROUND ${roundNumber}`);
+  notify(currentGameMode===GAME_MODE.INFINITY_ELIMINATION?"INFINITY · START":`ROUND ${roundNumber}`);
 }
 
 function startMatch(){
@@ -1566,10 +1664,25 @@ function startMatch(){
   rebuildAIBots();
   currentMapIndex=Math.floor(Math.random()*MAPS.length); healthOrbs=[];shieldOrbs=[];
   applyMap(currentMapIndex);
+
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+    // FFA uses the existing 10-combatant roster. Teams remain as visual spawn groups only;
+    // combat targeting ignores teams in these modes.
+    bots.forEach((b,i)=>{
+      b.name=currentGameMode===GAME_MODE.INFINITY_ELIMINATION?`INF-${i+2}`:`SOLO-${i+2}`;
+      b.kills=0;b.deaths=0;b.respawnAt=0;
+    });
+  }
+
   resetMatchScore();
   setMatchUi(true);
   beginNextRound();
-  notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION)
+    notify(`SOLO ELIMINATION · 10 PLAYERS · ${MAPS[currentMapIndex].name}`);
+  else if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION)
+    notify(`INFINITY ELIMINATION · 5:00 · 10 PLAYERS · ${MAPS[currentMapIndex].name}`);
+  else
+    notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
 
 function finishMatch(winnerTeam){
@@ -1607,9 +1720,40 @@ function finishRound(winnerTeam){
   roundRestartAt=gameTime+1.6;
 }
 
+function finishSoloRound(winner){
+  if(matchState!==MATCH_STATE.PLAYING || roundOver || !winner) return;
+  roundOver=true;
+  const wins=(soloRoundWins.get(winner)||0)+1;
+  soloRoundWins.set(winner,wins);
+  updateRoundHud();
+
+  if(wins>=ROUNDS_TO_WIN){
+    roundRestartAt=0;
+    matchEndAt=gameTime+1.8;
+    matchState=MATCH_STATE.MATCH_END;
+    resetCheats();
+    if(winner===player)sfxRoundWin();else sfxRoundLose();
+    notify(`${entityDisplayName(winner)} WINS · 7 ROUNDS`);
+    return;
+  }
+
+  matchState=MATCH_STATE.ROUND_END;
+  if(winner===player)sfxRoundWin();else sfxRoundLose();
+  notify(`${entityDisplayName(winner)} ROUND WIN · ${wins}/7`);
+  roundNumber++;
+  roundRestartAt=gameTime+1.6;
+}
+
 function checkRoundEnd(){
   if(onlineMode) return;
   if(matchState!==MATCH_STATE.PLAYING || roundOver) return;
+
+  if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION) return;
+  if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
+    const alive=allEntities().filter(e=>e.alive);
+    if(alive.length===1) finishSoloRound(alive[0]);
+    return;
+  }
 
   const blueAlive=(player.alive?1:0)+bots.filter(b=>b.team===0&&b.alive).length;
   const redAlive=bots.filter(b=>b.team===1&&b.alive).length;
@@ -1631,7 +1775,8 @@ function damageTarget(target,amount,shooter){
       return;
     }
   }
-  if(target!==player && shooter && target.team!==shooter.team){
+  if(target!==player && shooter &&
+     ((currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION) || target.team!==shooter.team)){
     target.alertTarget=shooter;
     target.alertTime=2.2;
     target.noSightFor=0;
@@ -1649,7 +1794,7 @@ function damageTarget(target,amount,shooter){
 function bestTargetInCone(shooter,range,spread,angleOffset=0){
   let best=null,bestScore=Infinity;
   const baseA=shooter.a+angleOffset;
-  for(const t of enemyList(shooter===player?player.team:shooter.team)){
+  for(const t of enemyList(shooter===player?player.team:shooter.team,shooter)){
     const d=dist(shooter,t);
     if(d>range || !los(shooter,t)) continue;
     const da=Math.abs(norm(angle(shooter,t)-baseA));
@@ -1669,7 +1814,7 @@ function pelletTarget(shooter,range,rayAngle){
   // almost exactly through the target's center angle.
   const HIT_RADIUS=18;
 
-  for(const t of enemyList(shooter===player?player.team:shooter.team)){
+  for(const t of enemyList(shooter===player?player.team:shooter.team,shooter)){
     if(!t.alive || !los(shooter,t)) continue;
 
     const dx=t.x-shooter.x;
@@ -1899,7 +2044,7 @@ function updatePlayer(dt){
     let targetDelta=Infinity;
     let bestScore=Infinity;
 
-    for(const e of enemyList(player.team)){
+    for(const e of enemyList(player.team,player)){
       if(!los(player,e)) continue;
       const da=norm(angle(player,e)-player.a);
       const absDa=Math.abs(da);
@@ -2045,7 +2190,7 @@ function botCanNotice(b,e){
 function chooseBotTarget(b,enemies){
   // 1) Someone who just damaged us gets immediate priority while still alive.
   if(b.alertTime>0 && b.alertTarget && b.alertTarget.alive &&
-     b.alertTarget.team!==b.team && los(b,b.alertTarget)){
+     ((currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION) || b.alertTarget.team!==b.team) && los(b,b.alertTarget)){
     return b.alertTarget;
   }
 
@@ -2109,7 +2254,7 @@ function updateBots(dt){
     rescueEntityFromWall(b);
     if(!b.alive || b.remote) continue;
 
-    const enemies=enemyList(b.team).filter(e=>e!==b);
+    const enemies=enemyList(b.team,b).filter(e=>e!==b);
     if(!enemies.length) continue;
 
     const t=chooseBotTarget(b,enemies);
@@ -2119,7 +2264,8 @@ function updateBots(dt){
     const notices=botCanNotice(b,t);
     const d=dist(b,t);
     b.alertTime=Math.max(0,(b.alertTime||0)-dt);
-    if(b.alertTarget && (!b.alertTarget.alive || b.alertTarget.team===b.team)) b.alertTarget=null;
+    if(b.alertTarget && (!b.alertTarget.alive ||
+       (currentGameMode!==GAME_MODE.SOLO_ELIMINATION && b.alertTarget.team===b.team))) b.alertTarget=null;
     b.huntRush=Math.max(0,(b.huntRush||0)-dt);
     if(sees){
       b.noSightFor=0;
@@ -2644,9 +2790,11 @@ function drawMinimap(cam){
   // Allies are always shown. Enemies appear only with ESP enabled.
   for(const e of allEntities()){
     if(!e.alive||e===cam)continue;
-    if(e.team!==cam.team&&!espOn)continue;
+    if((currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION)){
+      if(!espOn)continue;
+    }else if(e.team!==cam.team&&!espOn)continue;
     const px=ox+(e.x/TILE)*cell,py=oy+(e.y/TILE)*cell;
-    ctx.fillStyle=e.team===cam.team?"#55bfff":"#ff5353";
+    ctx.fillStyle=(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION)?"#ff5353":(e.team===cam.team?"#55bfff":"#ff5353");
     ctx.beginPath();
     ctx.arc(px,py,Math.max(2.3,cell*.26),0,TWO_PI);
     ctx.fill();
@@ -2855,7 +3003,7 @@ function renderWorld(){
 
     if(espOn){
       ensureShieldState(e);
-      const isEnemy=e.team!==cam.team;
+      const isEnemy=(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION) || e.team!==cam.team;
       const espBase=horizon+sz*cameraHeight;
 
       // Keep the wallhack box enemy-only so allies do not clutter the screen.
@@ -3136,7 +3284,15 @@ function renderWorld(){
   for(const c of casings){ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.r);ctx.fillStyle="#c8a25a";ctx.fillRect(-3,-1,6,2);ctx.restore()}
 
   const blueAlive=aliveCount(0), redAlive=aliveCount(1);
-  ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
+  if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+    const ranked=[...allEntities()].sort((a,b)=>(b.kills||0)-(a.kills||0));
+    const leader=ranked[0];
+    ui.topInfo.textContent=`FFA · LEADER ${leader?entityDisplayName(leader):"-"} ${leader?.kills||0} KILLS · ${MAPS[currentMapIndex].name}`;
+  }else if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
+    ui.topInfo.textContent=`FFA · ${allEntities().filter(e=>e.alive).length} ALIVE · ${MAPS[currentMapIndex].name}`;
+  }else{
+    ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
+  }
   renderRoundTimer();
   const omb=$("onlineMatchBanner");
   if(omb){
@@ -3164,9 +3320,20 @@ function renderWorld(){
     if(inSpectator){
       const target=ensureSpectateTarget();
       st.style.display="block";
-      st.textContent=target
-        ? `SPECTATING ${target.name} · TAP / CLICK = NEXT · BLUE ${blueAlive} / RED ${redAlive}`
-        : `TEAM ELIMINATED · BLUE 0 / RED ${redAlive}`;
+      if(currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
+        const remain=Math.max(0,Math.ceil((player.respawnAt||gameTime)-gameTime));
+        st.textContent=target
+          ? `RESPAWN ${remain}s · SPECTATING ${target.name} · TAP / CLICK = NEXT`
+          : `RESPAWN ${remain}s`;
+      }else if(currentGameMode===GAME_MODE.SOLO_ELIMINATION){
+        st.textContent=target
+          ? `SPECTATING ${target.name} · TAP / CLICK = NEXT`
+          : `ELIMINATED`;
+      }else{
+        st.textContent=target
+          ? `SPECTATING ${target.name} · TAP / CLICK = NEXT · BLUE ${blueAlive} / RED ${redAlive}`
+          : `TEAM ELIMINATED · BLUE 0 / RED ${redAlive}`;
+      }
     }else st.style.display="none";
   }
   if(ui.movementState){
@@ -4012,6 +4179,7 @@ function loop(now){
     if(matchState===MATCH_STATE.PLAYING){
       rescueEntityFromWall(player);
       updateRoundTimer(dt);
+      updateInfinityRespawns();
       if(!player.alive) ensureSpectateTarget();
       updatePlayer(dt);
       updateBots(dt);
