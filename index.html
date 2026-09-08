@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 ALL MODES</div>
+<div id="buildBadge">BUILD 2026-09-08 CAPTURE 2-ZONE 45S</div>
 
 
 <canvas id="game"></canvas>
@@ -364,7 +364,7 @@ button{font:inherit}
       </button>
       <button class="modeCard" data-mode="OBJECT_CAPTURE">
         <b>OBJECT CAPTURE</b>
-        <span>5 VS 5 · A/B/C 거점 · 100점 선취 · 5초 부활</span>
+        <span>5 VS 5 · A/B/C · 2개 이상 45초 연속 점령 · 5초 부활</span>
         <span class="modeTag">PLAYABLE</span>
       </button>
     </div>
@@ -962,11 +962,12 @@ const INFINITY_SPAWN_PROTECTION = 2;
 const BOSS_HP=2000;
 const BOSS_SHIELD=1000;
 const BOSS_ENEMY_COUNT=9;
-const CAPTURE_SCORE_TO_WIN=100;
+const CAPTURE_HOLD_TO_WIN=45;
 const CAPTURE_RESPAWN_DELAY=5;
 const CAPTURE_RADIUS=52;
 const CAPTURE_RATE=34;
-const CAPTURE_SCORE_RATE=2.2;
+let captureHoldBlue=0;
+let captureHoldRed=0;
 let captureZones=[];
 let captureScoreBlue=0;
 let captureScoreRed=0;
@@ -1365,10 +1366,28 @@ function nearestOpenWorld(tx,ty){
   }
   return{x:playerSpawn[0]*TILE,y:playerSpawn[1]*TILE};
 }
+const CAPTURE_LAYOUTS=[
+  // DEPOT: west loading lane / central crossing / east loading lane
+  [[6.5,10.5],[15.5,15.5],[23.5,20.5]],
+  // CARGO YARD: west container lane / open center / east container lane
+  [[4.5,9.5],[15.5,10.5],[25.5,15.5]],
+  // LA. WING: west hall / central lab hall / east hall
+  [[4.5,10.5],[15.5,15.5],[25.5,16.5]],
+  // CENTRAL PLAZA: west approach / plaza center / east approach
+  [[6.5,10.5],[14.5,16.5],[23.5,10.5]]
+];
 function resetCaptureZones(){
-  const w=MAP[0].length,hh=MAP.length,seeds=[[w*.30,hh*.35],[w*.50,hh*.58],[w*.70,hh*.35]];
-  captureZones=seeds.map((s,i)=>{const p=nearestOpenWorld(s[0],s[1]);return{id:String.fromCharCode(65+i),x:p.x,y:p.y,progress:0,owner:-1};});
-  captureScoreBlue=0;captureScoreRed=0;
+  const layout=CAPTURE_LAYOUTS[currentMapIndex]||CAPTURE_LAYOUTS[0];
+  captureZones=layout.map((s,i)=>{
+    const p=nearestOpenWorld(s[0],s[1]);
+    return{
+      id:String.fromCharCode(65+i),
+      x:p.x,y:p.y,
+      progress:0,owner:-1,
+      contested:false,blueInside:0,redInside:0
+    };
+  });
+  captureScoreBlue=0;captureScoreRed=0;captureHoldBlue=0;captureHoldRed=0;
 }
 function captureRespawnEntity(e){
   if(currentGameMode!==GAME_MODE.OBJECT_CAPTURE||!e||e.alive)return;
@@ -1381,19 +1400,26 @@ function updateCaptureMode(dt){
   for(const z of captureZones){
     const blue=allEntities().filter(e=>e.alive&&e.team===0&&dist(e,z)<=CAPTURE_RADIUS).length;
     const red=allEntities().filter(e=>e.alive&&e.team===1&&dist(e,z)<=CAPTURE_RADIUS).length;
-    if(blue&&red)continue;
-    const side=blue?0:(red?1:-1);if(side<0)continue;
+    z.blueInside=blue;z.redInside=red;z.contested=!!(blue&&red);
+    if(z.contested)continue;
+    const side=blue?0:(red?1:-1);
+    if(side<0)continue;
     const dir=side===0?1:-1,strength=Math.min(2,side===0?blue:red);
     z.progress=Math.max(-100,Math.min(100,z.progress+dir*CAPTURE_RATE*strength*dt));
-    if(z.progress>=100)z.owner=0;else if(z.progress<=-100)z.owner=1;
-    else if((z.owner===0&&z.progress<35)||(z.owner===1&&z.progress>-35))z.owner=-1;
+    if(z.progress>=100)z.owner=0;
+    else if(z.progress<=-100)z.owner=1;
+    else z.owner=-1;
   }
   const bo=captureZones.filter(z=>z.owner===0).length,ro=captureZones.filter(z=>z.owner===1).length;
-  captureScoreBlue=Math.min(100,captureScoreBlue+bo*CAPTURE_SCORE_RATE*dt);
-  captureScoreRed=Math.min(100,captureScoreRed+ro*CAPTURE_SCORE_RATE*dt);
-  if(captureScoreBlue>=100||captureScoreRed>=100){
+  // Victory requires continuously controlling at least two of the three zones.
+  // Lose the 2-zone majority at any moment and that team's 45-second hold timer resets.
+  captureHoldBlue=bo>=2?Math.min(CAPTURE_HOLD_TO_WIN,captureHoldBlue+dt):0;
+  captureHoldRed=ro>=2?Math.min(CAPTURE_HOLD_TO_WIN,captureHoldRed+dt):0;
+  captureScoreBlue=captureHoldBlue;
+  captureScoreRed=captureHoldRed;
+  if(captureHoldBlue>=CAPTURE_HOLD_TO_WIN||captureHoldRed>=CAPTURE_HOLD_TO_WIN){
     roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.4;resetCheats();
-    const win=captureScoreBlue>=100;if(win)sfxRoundWin();else sfxRoundLose();notify(win?"BLUE CAPTURE WIN":"RED CAPTURE WIN");
+    const win=captureHoldBlue>=CAPTURE_HOLD_TO_WIN;if(win)sfxRoundWin();else sfxRoundLose();notify(win?"BLUE HELD 2+ ZONES FOR 45s · WIN":"RED HELD 2+ ZONES FOR 45s · WIN");
   }
 }
 function nearestCaptureZoneForBot(b){
@@ -1643,9 +1669,15 @@ function updateRoundHud(){
     if(rr) rr.textContent=`${bots.filter(b=>b.alive).length}/9`;
     if(rt) rt.textContent="KILLING BOSS";
   }else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
-    if(br) br.textContent=Math.floor(captureScoreBlue);
-    if(rr) rr.textContent=Math.floor(captureScoreRed);
-    if(rt) rt.textContent=`CAPTURE · ${captureZones.map(z=>`${z.id}:${z.owner===0?"B":z.owner===1?"R":"-"}`).join(" ")}`;
+    if(br) br.textContent=`${captureHoldBlue.toFixed(1)}s`;
+    if(rr) rr.textContent=`${captureHoldRed.toFixed(1)}s`;
+    if(rt) rt.textContent=`CAPTURE · ${captureZones.map(z=>{
+      if(z.contested)return `${z.id}:CONTEST`;
+      if(z.owner===0)return `${z.id}:BLUE`;
+      if(z.owner===1)return `${z.id}:RED`;
+      const p=Math.round(Math.abs(z.progress||0));
+      return `${z.id}:${p}%`;
+    }).join(" · ")}`;
   }else{
     if(br) br.textContent=blueRoundWins;
     if(rr) rr.textContent=redRoundWins;
@@ -1809,7 +1841,7 @@ function startMatch(){
   else if(currentGameMode===GAME_MODE.KILLING_BOSS)
     notify(`KILLING BOSS · YOU VS 9 · HP ${BOSS_HP} / SH ${BOSS_SHIELD} · ${MAPS[currentMapIndex].name}`);
   else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE)
-    notify(`OBJECT CAPTURE · 5v5 · A/B/C · FIRST TO ${CAPTURE_SCORE_TO_WIN}`);
+    notify(`OBJECT CAPTURE · HOLD 2+ ZONES FOR ${CAPTURE_HOLD_TO_WIN}s`);
   else
     notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
@@ -2970,8 +3002,12 @@ function drawMinimap(cam){
   if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
     for(const z of captureZones){
       const zx=ox+(z.x/TILE)*cell,zy=oy+(z.y/TILE)*cell;
-      ctx.fillStyle=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#f4d35e";ctx.beginPath();ctx.arc(zx,zy,Math.max(3.5,cell*.42),0,TWO_PI);ctx.fill();
-      ctx.fillStyle="#111";ctx.font="800 8px Arial";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(z.id,zx,zy);
+      const rr=Math.max(4.5,cell*.55);
+      const c=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#d7c66a";
+      ctx.globalAlpha=.22;ctx.fillStyle=c;ctx.beginPath();ctx.arc(zx,zy,rr*1.65,0,TWO_PI);ctx.fill();
+      ctx.globalAlpha=1;ctx.strokeStyle=z.contested?"#fff":c;ctx.lineWidth=1.7;ctx.beginPath();ctx.arc(zx,zy,rr,0,TWO_PI);ctx.stroke();
+      ctx.fillStyle="rgba(8,10,12,.85)";ctx.beginPath();ctx.arc(zx,zy,rr*.72,0,TWO_PI);ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="800 8px Arial";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(z.id,zx,zy);
     }
   }
 
@@ -3046,18 +3082,6 @@ function renderWorld(){
     ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(w,yy);ctx.stroke();
   }
 
-  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE&&running){
-    for(const z of captureZones){
-      const d=dist(cam,z),rel=norm(angle(cam,z)-viewAngle);
-      if(Math.abs(rel)<FOV/2+.25&&d>8){
-        const sx=w/2+(rel/(FOV/2))*(w/2),sy=horizon+Math.min(h*.28,2200/Math.max(30,d)),rr=Math.max(10,Math.min(34,1900/Math.max(50,d)));
-        ctx.save();ctx.globalAlpha=.88;ctx.strokeStyle=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#f4d35e";ctx.lineWidth=4;
-        ctx.beginPath();ctx.arc(sx,sy,rr,0,TWO_PI);ctx.stroke();ctx.fillStyle="rgba(0,0,0,.55)";ctx.beginPath();ctx.arc(sx,sy,rr*.72,0,TWO_PI);ctx.fill();
-        ctx.fillStyle="#fff";ctx.font=`800 ${Math.max(12,rr*.9)}px Arial`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(z.id,sx,sy);ctx.restore();
-      }
-    }
-  }
-
   if(!running) return;
 
   const step = w > 900 ? 2 : 3;
@@ -3097,6 +3121,67 @@ function renderWorld(){
 
 
   // Floating green HP +10 pickups.
+  // OBJECT CAPTURE: actual floor pads, not floating debug icons.
+  if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
+    for(const z of captureZones){
+      if(!los(cam,z))continue;
+      const dx=z.x-cam.x,dy=z.y-cam.y,d=Math.hypot(dx,dy);
+      const rel=norm(Math.atan2(dy,dx)-viewAngle);
+      if(Math.abs(rel)>FOV*.60||d<12)continue;
+      const cd=d*Math.cos(rel);if(cd<=1)continue;
+
+      const sx=w/2+(Math.tan(rel)/Math.tan(FOV/2))*w/2;
+      const floorY=horizon+(h*TILE/Math.max(cd,1))*cameraHeight;
+      const padW=Math.max(18,Math.min(w*.34,(h*CAPTURE_RADIUS*2.05)/cd));
+      const padH=Math.max(5,padW*.20);
+      const ownerColor=z.owner===0?"#55bfff":z.owner===1?"#ff5353":"#d7c66a";
+      const progress=Math.max(-100,Math.min(100,z.progress||0));
+      const progressColor=progress>0?"#55bfff":progress<0?"#ff5353":"#d7c66a";
+
+      ctx.save();
+      // broad floor-painted capture zone
+      ctx.globalAlpha=.18;
+      ctx.fillStyle=ownerColor;
+      ctx.beginPath();ctx.ellipse(sx,floorY,padW*.55,padH*1.35,0,0,TWO_PI);ctx.fill();
+
+      ctx.globalAlpha=.90;
+      ctx.strokeStyle=z.contested?"#ffffff":ownerColor;
+      ctx.lineWidth=Math.max(2,padH*.23);
+      ctx.beginPath();ctx.ellipse(sx,floorY,padW*.52,padH*1.18,0,0,TWO_PI);ctx.stroke();
+
+      // inner progress paint — grows toward the capturing team's color
+      ctx.globalAlpha=.50+Math.abs(progress)/250;
+      ctx.strokeStyle=progressColor;
+      ctx.lineWidth=Math.max(2,padH*.55);
+      ctx.beginPath();
+      ctx.ellipse(sx,floorY,padW*(.20+.30*Math.abs(progress)/100),padH*(.45+.45*Math.abs(progress)/100),0,0,TWO_PI);
+      ctx.stroke();
+
+      // short physical-looking center beacon anchored to the pad
+      const beaconH=Math.max(16,Math.min(62,3300/cd));
+      const beaconW=Math.max(4,beaconH*.12);
+      ctx.globalAlpha=.78;
+      ctx.fillStyle=ownerColor;
+      ctx.fillRect(sx-beaconW/2,floorY-beaconH,beaconW,beaconH);
+      ctx.globalAlpha=1;
+      ctx.fillStyle="rgba(10,12,14,.82)";
+      ctx.beginPath();ctx.arc(sx,floorY-beaconH,Math.max(10,beaconH*.28),0,TWO_PI);ctx.fill();
+      ctx.strokeStyle=z.contested?"#fff":ownerColor;
+      ctx.lineWidth=3;ctx.stroke();
+      ctx.fillStyle="#fff";
+      ctx.font=`900 ${Math.max(11,beaconH*.25)}px Arial`;
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText(z.id,sx,floorY-beaconH);
+
+      if(z.contested){
+        ctx.font=`800 ${Math.max(9,beaconH*.17)}px Arial`;
+        ctx.fillStyle="#fff";
+        ctx.fillText("CONTESTED",sx,floorY-beaconH-Math.max(16,beaconH*.36));
+      }
+      ctx.restore();
+    }
+  }
+
   for(const o of healthOrbs){
     if(!o.active)continue;
     // World pickups obey line-of-sight; they no longer glow through walls.
@@ -3480,7 +3565,7 @@ function renderWorld(){
   }else if(currentGameMode===GAME_MODE.KILLING_BOSS){
     ui.topInfo.textContent=`BOSS ${Math.ceil(player.hp)}/${BOSS_HP} HP · ${Math.ceil(player.shield||0)}/${BOSS_SHIELD} SH · HUNTERS ${bots.filter(b=>b.alive).length}/13 · ${MAPS[currentMapIndex].name}`;
   }else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE){
-    ui.topInfo.textContent=`CAPTURE · BLUE ${Math.floor(captureScoreBlue)} : ${Math.floor(captureScoreRed)} RED · ${MAPS[currentMapIndex].name}`;
+    ui.topInfo.textContent=`CAPTURE · BLUE ${captureHoldBlue.toFixed(1)}/${CAPTURE_HOLD_TO_WIN}s · RED ${captureHoldRed.toFixed(1)}/${CAPTURE_HOLD_TO_WIN}s · HOLD 2+ · ${MAPS[currentMapIndex].name}`;
   }else{
     ui.topInfo.textContent=`BLUE ${blueAlive} ALIVE · RED ${redAlive} ALIVE · ${blueRoundWins}:${redRoundWins} · ${MAPS[currentMapIndex].name}`;
   }
