@@ -287,7 +287,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 BIG MAPS + SPAWN FIX</div>
+<div id="buildBadge">BUILD 2026-09-08 ESP SHIELD FIX</div>
 
 
 <canvas id="game"></canvas>
@@ -2724,20 +2724,45 @@ function renderWorld(){
       const barY=baseY-sz*1.36;
       ctx.fillStyle="rgba(0,0,0,.72)";
       ctx.fillRect(sx-barW/2-1,barY-1,barW+2,barH+2);
-      ctx.fillStyle=e.team===1?"#b94343":"#4e9dcc";
+      ctx.fillStyle=e.team===cam.team?"#4e9dcc":"#b94343";
       ctx.fillRect(sx-barW/2,barY,barW*hp,barH);
       ctx.fillStyle="rgba(255,255,255,.18)";
       ctx.fillRect(sx-barW/2,barY,barW*hp,Math.max(1,barH*.28));
+
+      // ESP shield bar: shown for both allies and enemies.
+      if(espOn){
+        ensureShieldState(e);
+        const shield=Math.max(0,Math.min(SHIELD_MAX,e.shield))/SHIELD_MAX;
+        const shieldY=barY+barH+3;
+        ctx.fillStyle="rgba(0,0,0,.72)";
+        ctx.fillRect(sx-barW/2-1,shieldY-1,barW+2,barH+2);
+        ctx.fillStyle="#e6bd32";
+        ctx.fillRect(sx-barW/2,shieldY,barW*shield,barH);
+        ctx.fillStyle="rgba(255,255,255,.28)";
+        ctx.fillRect(sx-barW/2,shieldY,barW*shield,Math.max(1,barH*.28));
+      }
     }
 
-    if(espOn && e.team===1){
-      ctx.strokeStyle="#ff3939";
-      ctx.lineWidth=2;
+    if(espOn){
+      ensureShieldState(e);
+      const isEnemy=e.team!==cam.team;
       const espBase=horizon+sz*cameraHeight;
-      ctx.strokeRect(sx-sz*.26,espBase-sz*1.16,sz*.52,sz*1.20);
-      ctx.fillStyle="white";
+
+      // Keep the wallhack box enemy-only so allies do not clutter the screen.
+      if(isEnemy){
+        ctx.strokeStyle="#ff3939";
+        ctx.lineWidth=2;
+        ctx.strokeRect(sx-sz*.26,espBase-sz*1.16,sz*.52,sz*1.20);
+      }
+
+      // Both teams expose HP + shield while ESP is enabled.
+      ctx.fillStyle=isEnemy?"#ffffff":"#8ed8ff";
       ctx.font="12px Arial";
-      ctx.fillText(`${e.name} ${Math.max(0,e.hp)}HP`,sx-sz*.28,espBase-sz*1.21);
+      ctx.fillText(
+        `${e.name} ${Math.max(0,Math.ceil(e.hp))}HP ${Math.max(0,Math.ceil(e.shield))}SH`,
+        sx-sz*.28,
+        espBase-sz*1.21
+      );
     }
   }
 
