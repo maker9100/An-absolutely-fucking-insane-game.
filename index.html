@@ -322,7 +322,7 @@ button{font:inherit}
   <div id="shieldBarTrack"><div id="shieldBarFill"></div></div>
 </div>
 
-<div id="buildBadge">BUILD 2026-09-08 CAPTURE 2-ZONE 45S</div>
+<div id="buildBadge">BUILD 2026-09-09 FFA PLAYER SPAWNS</div>
 
 
 <canvas id="game"></canvas>
@@ -364,7 +364,7 @@ button{font:inherit}
       </button>
       <button class="modeCard" data-mode="OBJECT_CAPTURE">
         <b>OBJECT CAPTURE</b>
-        <span>5 VS 5 · A/B/C · 2개 이상 45초 연속 점령 · 5초 부활</span>
+        <span>5 VS 5 · A/B/C · 2개 이상 점령 시간 누적 45초 · 5초 부활</span>
         <span class="modeTag">PLAYABLE</span>
       </button>
     </div>
@@ -1376,6 +1376,41 @@ const CAPTURE_LAYOUTS=[
   // CENTRAL PLAZA: west approach / plaza center / east approach
   [[6.5,10.5],[14.5,16.5],[23.5,10.5]]
 ];
+const FFA_ENEMY_LAYOUTS=[
+  // DEPOT: enemies spread through north / center / south lanes.
+  [[26.5,3.5],[15.5,4.5],[4.5,9.5],[14.5,9.5],[25.5,10.5],[4.5,20.5],[15.5,19.5],[26.5,24.5],[14.5,24.5]],
+  // CARGO YARD: staggered around container lanes instead of two team clusters.
+  [[26.5,3.5],[14.5,5.5],[3.5,9.5],[14.5,10.5],[26.5,11.5],[4.5,18.5],[15.5,19.5],[26.5,24.5],[14.5,24.5]],
+  // LA. WING: distributed among separate halls and laboratory approaches.
+  [[26.5,3.5],[14.5,5.5],[3.5,9.5],[14.5,10.5],[26.5,10.5],[4.5,16.5],[14.5,16.5],[26.5,23.5],[14.5,24.5]],
+  // CENTRAL PLAZA: ring around the plaza with multiple approach angles.
+  [[26.5,3.5],[14.5,4.5],[4.5,9.5],[10.5,15.5],[20.5,15.5],[4.5,20.5],[14.5,20.5],[26.5,23.5],[14.5,24.5]]
+];
+const FFA_PLAYER_SPAWNS=[
+  [4.5,24.5], // DEPOT
+  [3.5,24.5], // CARGO YARD
+  [4.5,23.5], // LA. WING
+  [4.5,24.5]  // CENTRAL PLAZA
+];
+function ffaPlayerSpawn(){
+  return FFA_PLAYER_SPAWNS[currentMapIndex]||playerSpawn;
+}
+function ffaEnemyLayout(){
+  return FFA_ENEMY_LAYOUTS[currentMapIndex]||FFA_ENEMY_LAYOUTS[0];
+}
+function safeFfaRespawnPoint(e){
+  const pool=[ffaPlayerSpawn(),...ffaEnemyLayout()];
+  const living=allEntities().filter(o=>o.alive&&o!==e);
+  const ranked=pool.map(p=>{
+    const wx=p[0]*TILE,wy=p[1]*TILE;
+    let nearest=Infinity;
+    for(const o of living) nearest=Math.min(nearest,Math.hypot(wx-o.x,wy-o.y));
+    return {p,nearest};
+  }).sort((a,b)=>b.nearest-a.nearest);
+  // Pick randomly among the four safest valid areas so respawns stay unpredictable.
+  const candidates=ranked.slice(0,Math.min(4,ranked.length));
+  return candidates[Math.floor(Math.random()*candidates.length)]?.p||playerSpawn;
+}
 function resetCaptureZones(){
   const layout=CAPTURE_LAYOUTS[currentMapIndex]||CAPTURE_LAYOUTS[0];
   captureZones=layout.map((s,i)=>{
@@ -1411,15 +1446,16 @@ function updateCaptureMode(dt){
     else z.owner=-1;
   }
   const bo=captureZones.filter(z=>z.owner===0).length,ro=captureZones.filter(z=>z.owner===1).length;
-  // Victory requires continuously controlling at least two of the three zones.
-  // Lose the 2-zone majority at any moment and that team's 45-second hold timer resets.
-  captureHoldBlue=bo>=2?Math.min(CAPTURE_HOLD_TO_WIN,captureHoldBlue+dt):0;
-  captureHoldRed=ro>=2?Math.min(CAPTURE_HOLD_TO_WIN,captureHoldRed+dt):0;
+  // Victory uses cumulative control time.
+  // While a team owns at least two zones, its timer increases.
+  // Dropping below two zones pauses the timer instead of resetting it.
+  if(bo>=2) captureHoldBlue=Math.min(CAPTURE_HOLD_TO_WIN,captureHoldBlue+dt);
+  if(ro>=2) captureHoldRed=Math.min(CAPTURE_HOLD_TO_WIN,captureHoldRed+dt);
   captureScoreBlue=captureHoldBlue;
   captureScoreRed=captureHoldRed;
   if(captureHoldBlue>=CAPTURE_HOLD_TO_WIN||captureHoldRed>=CAPTURE_HOLD_TO_WIN){
     roundOver=true;firing=false;matchState=MATCH_STATE.MATCH_END;matchEndAt=gameTime+2.4;resetCheats();
-    const win=captureHoldBlue>=CAPTURE_HOLD_TO_WIN;if(win)sfxRoundWin();else sfxRoundLose();notify(win?"BLUE HELD 2+ ZONES FOR 45s · WIN":"RED HELD 2+ ZONES FOR 45s · WIN");
+    const win=captureHoldBlue>=CAPTURE_HOLD_TO_WIN;if(win)sfxRoundWin();else sfxRoundLose();notify(win?"BLUE ACCUMULATED 45s WITH 2+ ZONES · WIN":"RED ACCUMULATED 45s WITH 2+ ZONES · WIN");
   }
 }
 function nearestCaptureZoneForBot(b){
@@ -1493,9 +1529,9 @@ function killEntity(victim,killer){
 function infinityRespawnEntity(e){
   if(currentGameMode!==GAME_MODE.INFINITY_ELIMINATION || !e || e.alive) return;
 
-  // FFA respawns use the whole map's spawn pool instead of the old team-only spawn.
-  const pool=[playerSpawn,...blueSpawn,...redSpawn];
-  let p=pool[Math.floor(Math.random()*pool.length)]||playerSpawn;
+  // FFA respawns prefer one of the safest distributed spawn points.
+  // This avoids reappearing inside the old blue/red clusters or directly beside a fight.
+  const p=safeFfaRespawnPoint(e);
   e.x=p[0]*TILE;e.y=p[1]*TILE;
   rescueEntityFromWall(e);
   e.hp=100;
@@ -1776,8 +1812,10 @@ function beginNextRound(){
   resetEntityShield(player);
   player.alive=true;
   player.invulnerableUntil=0;
-  player.x=playerSpawn[0]*TILE;
-  player.y=playerSpawn[1]*TILE;
+  const ffaStart=currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION;
+  const roundPlayerSpawn=ffaStart?ffaPlayerSpawn():playerSpawn;
+  player.x=roundPlayerSpawn[0]*TILE;
+  player.y=roundPlayerSpawn[1]*TILE;
   player.a=0;
   player.ammo=[30,12,999,6,1,50];
   player.nextShot=0;
@@ -1791,10 +1829,12 @@ function beginNextRound(){
   ui.crouch?.classList.remove("on");
 
   let bi=0,ri=0;
+  const ffaSpawns=ffaStart?ffaEnemyLayout():null;
+  let ffaIndex=0;
   for(const b of bots){
-    const spawn=b.team===0
-      ? blueSpawn[bi++ % blueSpawn.length]
-      : redSpawn[ri++ % redSpawn.length];
+    const spawn=ffaStart
+      ? ffaSpawns[ffaIndex++ % ffaSpawns.length]
+      : (b.team===0 ? blueSpawn[bi++ % blueSpawn.length] : redSpawn[ri++ % redSpawn.length]);
     resetEntityForRound(b,spawn);
   }
 
@@ -1823,8 +1863,8 @@ function startMatch(){
   if(currentGameMode===GAME_MODE.OBJECT_CAPTURE) resetCaptureZones();
 
   if(currentGameMode===GAME_MODE.SOLO_ELIMINATION || currentGameMode===GAME_MODE.INFINITY_ELIMINATION){
-    // FFA uses the existing 10-combatant roster. Teams remain as visual spawn groups only;
-    // combat targeting ignores teams in these modes.
+    // FFA uses the existing 10-combatant roster, but spawn positions are now distributed
+    // around each map instead of reusing the old blue/red team clusters.
     bots.forEach((b,i)=>{
       b.name=currentGameMode===GAME_MODE.INFINITY_ELIMINATION?`INF-${i+2}`:`SOLO-${i+2}`;
       b.kills=0;b.deaths=0;b.respawnAt=0;
@@ -1841,7 +1881,7 @@ function startMatch(){
   else if(currentGameMode===GAME_MODE.KILLING_BOSS)
     notify(`KILLING BOSS · YOU VS 9 · HP ${BOSS_HP} / SH ${BOSS_SHIELD} · ${MAPS[currentMapIndex].name}`);
   else if(currentGameMode===GAME_MODE.OBJECT_CAPTURE)
-    notify(`OBJECT CAPTURE · HOLD 2+ ZONES FOR ${CAPTURE_HOLD_TO_WIN}s`);
+    notify(`OBJECT CAPTURE · ACCUMULATE ${CAPTURE_HOLD_TO_WIN}s WHILE HOLDING 2+ ZONES`);
   else
     notify(`TEAM ELIMINATION · AI 5v5 · ${MAPS[currentMapIndex].name}`);
 }
